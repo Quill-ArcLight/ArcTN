@@ -34,6 +34,9 @@ return an installation error; independent algorithms and execution of supplied
 paths remain available.
 
 Complete wheels are currently supplied for internal use only, with no PyPI or
+public binary release. The Arclight Noncommercial Source-Available License 1.0 excludes the
+private engine. The engine requires separate terms; external distribution
+terms have not been established.
 
 ## C ABI, version 1
 

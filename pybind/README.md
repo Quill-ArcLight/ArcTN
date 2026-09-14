@@ -2,6 +2,10 @@
 
 Python 包提供收缩序优化、路径保存与加载、切片和数值收缩接口。
 
+首次源码发布请使用下文的“从源码安装”。该方式不附带闭源引擎，可以执行已有路径、
+切片和网络化简；Light/Heavy 路径规划仍需要单独许可的引擎。
+下文“完整 wheel”描述含引擎的内部安装包，不表示公开源码发行版包含它。
+
 <a id="complete-wheel-installation"></a>
 
 ## 安装完整 wheel
@@ -24,6 +28,7 @@ Linux、macOS 和 Windows 的 wheel 不能跨平台使用；具体可安装的�
 `arctn_path`、`arctn_schedule`、`arctn_plan` 等高层接口的参数和返回类型保持一致。
 
 完整 wheel 目前仅供内部使用，尚未发布到 PyPI，也没有公开的二进制发行版。
+公司源码采用 Arclight 非商业源码可用许可证 1.0（禁止商用和闭源集成，非 OSI 开源许可）。Light/Heavy 动态库单独许可，其对外分发条款尚未确定。
 
 NumPy 会作为依赖自动安装。如需与 Quimb 和 Cotengra 配合使用，请安装：
 

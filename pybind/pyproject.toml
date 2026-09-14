@@ -9,6 +9,8 @@ description = "ArcTN tensor-network pathfinding and execution bindings for Pytho
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Zhengyi Liu" }]
+license = "LicenseRef-Arclight-NC-Source-1.0"
+license-files = ["licenses/LICENSE", "licenses/THIRD_PARTY_NOTICES.md", "licenses/third-party/**/*"]
 keywords = ["tensor-networks", "tensor-contraction", "einsum", "quantum"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -47,3 +49,4 @@ module-name = "arctn.arctn_py"
 python-packages = ["arctn"]
 bindings = "pyo3"
 strip = true
+exclude = ["**/__pycache__/**", "**/*.pyc", "**/_lib/**", "**/*arctn_engine*", "**/*.pdb"]

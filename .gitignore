@@ -6,6 +6,8 @@ __pycache__/
 *.so
 *.dylib
 *.dll
+*.pyd
+*.pdb
 *.a
 *.rlib
 *.whl
@@ -13,3 +15,6 @@ __pycache__/
 .env
 .env.*
 /dist/
+
+# Local release review records and evidence are not public source.
+/docs/open-source/

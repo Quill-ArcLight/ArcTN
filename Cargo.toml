@@ -2,9 +2,11 @@
 name = "arctn"
 version = "1.0.0"
 autobins = false
+publish = false
 edition = "2021"
 authors = ["Zhengyi Liu"]
 description = "Tensor-network contraction order optimization, slicing, and execution"
+license = "LicenseRef-Arclight-NC-Source-1.0"
 readme = "README.md"
 build = "build.rs"
 rust-version = "1.82"
@@ -21,6 +23,9 @@ include = [
     "/README.md",
     "/CONTRIBUTING.md",
     "/SECURITY.md",
+    "/LICENSE",
+    "/THIRD_PARTY_NOTICES.md",
+    "/THIRD_PARTY_LICENSES/**",
     "/docs/mpi.md",
     "/docs/engine-interface.md",
     # Examples included in the published package.

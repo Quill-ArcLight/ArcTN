@@ -21,10 +21,21 @@ ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和�
 
 ## 源码与 Light / Heavy
 
+本仓库包含独立算法、网络与路径类型、切片、数值执行、Python 接口和命令行工具，公司有权授权的源码采用 **Arclight 非商业源码可用许可证 1.0**，禁止商用和闭源集成；这不是 OSI 标准开源许可。仓库目前保持私有，克隆需要访问权限。
 
 **Light 和 Heavy 的实现闭源，本仓库保留调用接口。** 完整 Python 安装包包含编译后的 Light/Heavy 动态库，导入 `arctn` 时会自动识别，调用 Light/Heavy 时加载；从本仓库源码构建则不包含该动态库，但可以使用独立算法和数值执行功能。
 
 完整安装包目前仅供内部使用，尚未通过 PyPI 或公开 Release 分发。源码许可证不涵盖 Light/Heavy 动态库，其对外分发条款尚未确定。
+
+首次源码发布不附带 Light/Heavy 引擎；从本仓库构建的 wheel 也明确排除该引擎。
+无引擎时，Rust 独立路径算法、CLI 的 `--method greedy` 和张量数值收缩可用；
+Python 可执行已有收缩路径、切片和网络化简，但 `arctn_path`、`arctn_schedule`、
+`arctn_plan` 的 Light/Heavy 规划需要另行提供引擎。下面的矩阵乘法示例不需要引擎。
+
+本轮发布检查以 Windows x64、Rust 1.97.1、CPython 3.13 为验证目标。
+Linux/macOS、其他 Python 版本及 MPI 仍需对应环境的 CI 验证；版本下限是声明的兼容范围，
+不代表已在所有组合上完成测试。MPI 为实验性可选功能，保留源码但不在首发支持范围内；
+普通单机 Rust/Python 功能不需要 MPI。MPI 依赖的维护状态说明见 [MPI 文档](docs/mpi.md)。
 
 <a id="rust"></a>
 
@@ -123,3 +134,4 @@ macOS 使用对应的 `.dylib`；Windows 使用 `.dll`，PowerShell 的设置方
 
 ## 许可证
 
+公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖及此前已按 MIT/Apache 授出的版本保留各自权利，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库单独许可，本许可证不授权其分发或使用。

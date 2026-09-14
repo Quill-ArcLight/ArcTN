@@ -1,0 +1,17 @@
+{
+  "accepted_on": "2026-09-14",
+  "review_due": "2026-10-15",
+  "owner": "liuxl",
+  "scope": "Source release; MPI remains experimental and outside first-release support.",
+  "exceptions": [
+    {
+      "lockfile": "Cargo.lock",
+      "advisory": "RUSTSEC-2025-0058",
+      "kind": "unmaintained",
+      "package": "custom_derive",
+      "version": "0.1.7",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
+    }
+  ]
+}

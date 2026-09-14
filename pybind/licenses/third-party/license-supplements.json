@@ -1,0 +1,38 @@
+[
+  {
+    "package": "build-probe-mpi@0.1.6",
+    "url": "https://raw.githubusercontent.com/rsmpi/rsmpi/0c71d34992929239f9ac90343e55ed4a84a69610/LICENSE-MIT",
+    "path": "THIRD_PARTY_LICENSES/cargo/build-probe-mpi-0.1.6/LICENSE-MIT",
+    "sha256": "c753626948da51cec25ba3fdfc311b182ce1861b66a1fcc52ed622307dc22020"
+  },
+  {
+    "package": "build-probe-mpi@0.1.6",
+    "url": "https://raw.githubusercontent.com/rsmpi/rsmpi/0c71d34992929239f9ac90343e55ed4a84a69610/LICENSE-APACHE",
+    "path": "THIRD_PARTY_LICENSES/cargo/build-probe-mpi-0.1.6/LICENSE-APACHE",
+    "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+  },
+  {
+    "package": "mpi-sys@0.2.4",
+    "url": "https://raw.githubusercontent.com/rsmpi/rsmpi/0c71d34992929239f9ac90343e55ed4a84a69610/LICENSE-MIT",
+    "path": "THIRD_PARTY_LICENSES/cargo/mpi-sys-0.2.4/LICENSE-MIT",
+    "sha256": "c753626948da51cec25ba3fdfc311b182ce1861b66a1fcc52ed622307dc22020"
+  },
+  {
+    "package": "mpi-sys@0.2.4",
+    "url": "https://raw.githubusercontent.com/rsmpi/rsmpi/0c71d34992929239f9ac90343e55ed4a84a69610/LICENSE-APACHE",
+    "path": "THIRD_PARTY_LICENSES/cargo/mpi-sys-0.2.4/LICENSE-APACHE",
+    "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+  },
+  {
+    "package": "libffi@5.1.1",
+    "url": "https://raw.githubusercontent.com/libffi-rs/libffi-rs/463a6cbde4abaca2bd164ea3c5a06aa329781a36/LICENSE-MIT",
+    "path": "THIRD_PARTY_LICENSES/cargo/libffi-5.1.1/LICENSE-MIT",
+    "sha256": "7dafbced615981b7969f8d74f89cb6ecfca513aa4df68c2dc8812807a79b2594"
+  },
+  {
+    "package": "libffi@5.1.1",
+    "url": "https://raw.githubusercontent.com/libffi-rs/libffi-rs/463a6cbde4abaca2bd164ea3c5a06aa329781a36/LICENSE-APACHE",
+    "path": "THIRD_PARTY_LICENSES/cargo/libffi-5.1.1/LICENSE-APACHE",
+    "sha256": "1ecdd00496589b97dd112b132a1224c55f53b8394970ef2a7162b0f3d33b03cb"
+  }
+]

@@ -29,6 +29,8 @@ jobs:
       - run: cargo package --locked
 
   mpi:
+    # Experimental MPI coverage is retained but is outside first-release support.
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

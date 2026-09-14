@@ -1,0 +1,140 @@
+Arclight Noncommercial Source-Available License 1.0
+SPDX-License-Identifier: LicenseRef-Arclight-NC-Source-1.0
+
+Copyright (c) 2026 北京中科弧光量子软件技术有限公司
+Copyright in accepted contributions remains with their respective owners.
+
+This is a source-available license, not an Open Source Initiative approved
+open-source license. It prohibits commercial use and closed-source integration.
+
+1. Scope and definitions
+
+"Software" means the original code, documentation and other material whose
+copyright owners make it available under this license, including contributions
+explicitly submitted and accepted under this license. Separately identified
+third-party material is not Software under this definition.
+
+"You" means the person or legal entity exercising rights under this license.
+
+"Commercial Use" means use primarily intended for, directed toward, or in support
+of commercial advantage or monetary compensation, whether directly or indirectly.
+It includes internal business operations, commercial product research or
+development, paid consulting, sale or licensing of products, and provision of
+commercial hosted or network services using the Software. Making a service free
+to its immediate users does not make a commercially operated service
+noncommercial. Nonprofit status alone does not exempt a commercial activity.
+Unpaid personal study, teaching and research unrelated to commercial advantage
+may qualify as noncommercial use.
+
+"Combined Work" means a program or service incorporating, embedding, statically
+or dynamically linking the Software, or containing adaptations of it. A wrapper
+or companion component specifically designed to integrate the Software as part
+of one program or service is included, including integration across a process
+or network boundary. Independent programs merely stored alongside the Software,
+general-purpose operating systems and development tools are not included merely
+for that reason. Data, circuits and other outputs produced by running the
+Software are not covered merely because the Software produced them, unless they
+contain or adapt a substantial portion of the Software itself.
+
+"Complete Source" means the preferred form for modifying a work, including its
+covered components, interface definitions, and scripts and instructions needed
+to build, install and run it. Separately licensed third-party dependencies may
+be identified by exact versions, publicly accessible source locations and their
+applicable licenses instead of being copied into the source release. Private
+keys, access credentials and personal or confidential input data must not be
+included; provide instructions for supplying those separately.
+
+2. Conditional grant
+
+Subject to every condition of this license, each copyright owner grants You a
+worldwide, non-exclusive, royalty-free license to inspect, reproduce, run,
+modify and distribute that owner's Software solely for noncommercial purposes.
+No permission for Commercial Use is granted. Commercial Use or use without
+satisfying the source requirements needs a separate written license from all
+copyright owners whose permission is required. Contact the project maintainer
+at quill@arclightquantum.com; this license does not promise that a separate
+license is available or that the maintainer can relicense others' contributions.
+
+3. No closed-source use; public source requirement
+
+ArcTN official-engine exception: solely loading an unmodified Light/Heavy
+binary supplied by the company under its separate terms does not require
+disclosing that binary's proprietary implementation. This exception covers
+only that official engine implementation, not other modifications or closed
+integration code. All conditions on the Software, including noncommercial
+use and source availability of covered modifications, continue to apply.
+This exception does not itself grant a license to the engine binary.
+
+You may not use the Software in a closed-source Combined Work. Before running,
+deploying, providing access to or distributing a modified version of the
+Software or a Combined Work, You must make its Complete Source freely available
+to the public, without registration, payment or a confidentiality obligation.
+This requirement applies to internal use and network services as well as
+distribution. Publish the covered modifications and integration code under
+this same license, granting recipients the same rights. Unmodified Software
+already available publicly under this license satisfies the source requirement
+for that unmodified Software. Merely publishing a binary, patches without the
+applicable base source, or a description of an implementation is insufficient.
+
+Identify each released or deployed version and provide a working source link
+with distributed copies and in the interface or documentation of a service.
+Keep the applicable Complete Source publicly available for as long as You use
+or provide the work and for at least three years after Your last use, provision
+or distribution of that version. Preserve this license and copyright notices,
+and clearly identify modifications and their dates. Do not impose additional
+restrictions that prevent recipients exercising the rights granted here.
+
+4. Third-party rights
+
+The separately supplied proprietary ArcTN Light/Heavy engine binaries are not
+Software under this license and are not granted any rights by this license.
+They require their own written distribution and use terms. Their exclusion
+does not grant recipients an exception to the conditions on the Software.
+
+Third-party dependencies and separately identified files remain under their
+own licenses. This license does not replace, restrict or withdraw rights granted
+by those licenses, and does not claim ownership of that material. Retain their
+required copyright, license, modification and attribution notices. Do not apply the noncommercial or same-license conditions to those third-party
+files themselves. If You cannot comply with both the applicable third-party
+terms and this license for Your proposed combination, no permission for that
+combination is granted here.
+
+5. Patents and trademarks
+
+Each contributor grants, subject to this license's noncommercial and source
+conditions, a royalty-free patent license only for patent claims that the
+contributor can license and that are necessarily infringed by that contribution
+alone or by its combination with the Software as contributed. No other patent
+rights are granted. If You initiate patent litigation alleging that the
+Software or a contribution infringes a patent, the patent rights granted to You
+under this section terminate when that claim is filed. No trademark, trade name
+or endorsement rights are granted.
+
+6. Termination
+
+Rights under this license terminate if You fail to comply with its conditions.
+If this is Your first notified violation and You fully remedy it within thirty
+days after receiving written notice, the rights are reinstated unless the
+copyright owner expressly and finally terminates them for that violation.
+Termination does not relieve obligations that arose while exercising rights,
+including the source-availability period, and does not terminate compliant
+recipients' own licenses. Statutory rights that do not require permission are
+unaffected.
+
+7. No warranty; liability
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE OR
+NONINFRINGEMENT. TO THE EXTENT PERMITTED BY APPLICABLE LAW, COPYRIGHT OWNERS AND
+CONTRIBUTORS ARE NOT LIABLE FOR DAMAGES OR OTHER LIABILITY ARISING FROM THE
+SOFTWARE OR ITS USE, WHETHER UNDER CONTRACT, TORT OR ANOTHER LEGAL THEORY.
+Nothing here excludes liability that applicable law does not allow to be
+excluded. You are responsible for evaluating suitability and verifying results.
+
+8. Version and interpretation
+
+Only version 1.0 stated here is granted; future versions are not automatically
+available as alternatives. Descriptions in README files are summaries; this
+English license text governs the permissions granted. If any provision is
+unenforceable, the remaining provisions apply to the extent permitted by law.
+No implied permission is granted beyond the express grant above.

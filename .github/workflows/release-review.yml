@@ -1,0 +1,31 @@
+name: Source release review
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - 'deny.toml'
+      - 'scripts/open-source/**'
+      - '.github/workflows/release-review.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-deny --version 0.20.2 --locked
+      - run: cargo install cargo-audit --version 0.22.2 --locked
+      - run: cargo deny --all-features --config deny.toml check licenses sources bans
+      - run: cargo deny --manifest-path pybind/Cargo.toml --all-features --config deny.toml check licenses sources bans
+      - run: python -m unittest discover -s scripts/open-source/tests -v
+      - run: python scripts/open-source/advisory_policy.py

@@ -1,0 +1,101 @@
+name,version,declared_license,selected_license,crate_sha256,source_url,license_directory
+aho-corasick,1.1.4,Unlicense OR MIT,MIT,ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301,https://crates.io/crates/aho-corasick/1.1.4,cargo/aho-corasick-1.1.4
+autocfg,1.5.1,Apache-2.0 OR MIT,MIT,f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53,https://crates.io/crates/autocfg/1.5.1,cargo/autocfg-1.5.1
+bindgen,0.72.1,BSD-3-Clause,BSD-3-Clause,993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895,https://crates.io/crates/bindgen/0.72.1,cargo/bindgen-0.72.1
+bitflags,2.13.0,MIT OR Apache-2.0,MIT,b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8,https://crates.io/crates/bitflags/2.13.0,cargo/bitflags-2.13.0
+build-probe-mpi,0.1.6,MIT OR Apache-2.0,MIT,abee715b93fb80cbca8602265e0c2acd40b60df81fab1f3fd29a734babd697e7,https://crates.io/crates/build-probe-mpi/0.1.6,cargo/build-probe-mpi-0.1.6
+cc,1.2.67,MIT OR Apache-2.0,MIT,e17dd265a7d0f31ef544e1b20e03add05d3b45b491b633b10d67145d2acc1a38,https://crates.io/crates/cc/1.2.67,cargo/cc-1.2.67
+cexpr,0.6.0,Apache-2.0/MIT,MIT,6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766,https://crates.io/crates/cexpr/0.6.0,cargo/cexpr-0.6.0
+cfg-if,1.0.4,MIT OR Apache-2.0,MIT,9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801,https://crates.io/crates/cfg-if/1.0.4,cargo/cfg-if-1.0.4
+clang-sys,1.8.1,Apache-2.0,Apache-2.0,0b023947811758c97c59bf9d1c188fd619ad4718dcaa767947df1cadb14f39f4,https://crates.io/crates/clang-sys/1.8.1,cargo/clang-sys-1.8.1
+conv,0.3.3,MIT,MIT,78ff10625fd0ac447827aa30ea8b861fead473bb60aeb73af6c1c58caf0d1299,https://crates.io/crates/conv/0.3.3,cargo/conv-0.3.3
+crossbeam-channel,0.5.15,MIT OR Apache-2.0,MIT,82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2,https://crates.io/crates/crossbeam-channel/0.5.15,cargo/crossbeam-channel-0.5.15
+crossbeam-channel,0.5.17,MIT OR Apache-2.0,MIT,98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1,https://crates.io/crates/crossbeam-channel/0.5.17,cargo/crossbeam-channel-0.5.17
+crossbeam-deque,0.8.6,MIT OR Apache-2.0,MIT,9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51,https://crates.io/crates/crossbeam-deque/0.8.6,cargo/crossbeam-deque-0.8.6
+crossbeam-deque,0.8.8,MIT OR Apache-2.0,MIT,622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a,https://crates.io/crates/crossbeam-deque/0.8.8,cargo/crossbeam-deque-0.8.8
+crossbeam-epoch,0.9.21,MIT OR Apache-2.0,MIT,dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d,https://crates.io/crates/crossbeam-epoch/0.9.21,cargo/crossbeam-epoch-0.9.21
+crossbeam-utils,0.8.21,MIT OR Apache-2.0,MIT,d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28,https://crates.io/crates/crossbeam-utils/0.8.21,cargo/crossbeam-utils-0.8.21
+crossbeam-utils,0.8.23,MIT OR Apache-2.0,MIT,a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6,https://crates.io/crates/crossbeam-utils/0.8.23,cargo/crossbeam-utils-0.8.23
+custom_derive,0.1.7,MIT/Apache-2.0,MIT,ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9,https://crates.io/crates/custom_derive/0.1.7,cargo/custom_derive-0.1.7
+either,1.16.0,MIT OR Apache-2.0,MIT,91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e,https://crates.io/crates/either/1.16.0,cargo/either-1.16.0
+either,1.18.0,MIT OR Apache-2.0,MIT,252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34,https://crates.io/crates/either/1.18.0,cargo/either-1.18.0
+find-msvc-tools,0.1.9,MIT OR Apache-2.0,MIT,5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582,https://crates.io/crates/find-msvc-tools/0.1.9,cargo/find-msvc-tools-0.1.9
+getrandom,0.2.17,MIT OR Apache-2.0,MIT,ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0,https://crates.io/crates/getrandom/0.2.17,cargo/getrandom-0.2.17
+glob,0.3.3,MIT OR Apache-2.0,MIT,0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280,https://crates.io/crates/glob/0.3.3,cargo/glob-0.3.3
+heck,0.5.0,MIT OR Apache-2.0,MIT,2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea,https://crates.io/crates/heck/0.5.0,cargo/heck-0.5.0
+hermit-abi,0.5.2,MIT OR Apache-2.0,MIT,fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c,https://crates.io/crates/hermit-abi/0.5.2,cargo/hermit-abi-0.5.2
+hermit-abi,0.5.3,MIT OR Apache-2.0,MIT,e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284,https://crates.io/crates/hermit-abi/0.5.3,cargo/hermit-abi-0.5.3
+itertools,0.13.0,MIT OR Apache-2.0,MIT,413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186,https://crates.io/crates/itertools/0.13.0,cargo/itertools-0.13.0
+itoa,1.0.18,MIT OR Apache-2.0,MIT,8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682,https://crates.io/crates/itoa/1.0.18,cargo/itoa-1.0.18
+libc,0.2.186,MIT OR Apache-2.0,MIT,68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66,https://crates.io/crates/libc/0.2.186,cargo/libc-0.2.186
+libc,0.2.189,MIT OR Apache-2.0,MIT,3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2,https://crates.io/crates/libc/0.2.189,cargo/libc-0.2.189
+libffi-sys,4.2.0,MIT OR Apache-2.0,MIT,25831b230b6a90bdea9f28339c1d00d59773a1c492e8ca09b1ad80e56394c261,https://crates.io/crates/libffi-sys/4.2.0,cargo/libffi-sys-4.2.0
+libffi,5.1.1,MIT OR Apache-2.0,MIT,ed185dbb87539a100c1b36c219e16e71572c6d4d4fed3ded898140f755adeaaf,https://crates.io/crates/libffi/5.1.1,cargo/libffi-5.1.1
+libloading,0.8.9,ISC,ISC,d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55,https://crates.io/crates/libloading/0.8.9,cargo/libloading-0.8.9
+matrixmultiply,0.3.10,MIT/Apache-2.0,MIT,a06de3016e9fae57a36fd14dba131fccf49f74b40b7fbdb472f96e361ec71a08,https://crates.io/crates/matrixmultiply/0.3.10,cargo/matrixmultiply-0.3.10
+matrixmultiply,0.3.11,MIT/Apache-2.0,MIT,3f607c237553f086e7043417a51df26b2eb899d3caff94e6a67592ff992fedc7,https://crates.io/crates/matrixmultiply/0.3.11,cargo/matrixmultiply-0.3.11
+memchr,2.8.2,Unlicense OR MIT,MIT,88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4,https://crates.io/crates/memchr/2.8.2,cargo/memchr-2.8.2
+memchr,2.8.3,Unlicense OR MIT,MIT,cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98,https://crates.io/crates/memchr/2.8.3,cargo/memchr-2.8.3
+minimal-lexical,0.2.1,MIT/Apache-2.0,MIT,68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a,https://crates.io/crates/minimal-lexical/0.2.1,cargo/minimal-lexical-0.2.1
+mpi-sys,0.2.4,MIT OR Apache-2.0,MIT,9b828192ea0f41740b6c2a40beaa140c63e8ae51aef58b6edf5d23c0340c4f2b,https://crates.io/crates/mpi-sys/0.2.4,cargo/mpi-sys-0.2.4
+mpi,0.8.2,MIT OR Apache-2.0,MIT,302522157fd9f0ae43eb9792db89932045a29ae57b15a525724c2b3d0981c338,https://crates.io/crates/mpi/0.8.2,cargo/mpi-0.8.2
+ndarray,0.17.2,MIT OR Apache-2.0,MIT,520080814a7a6b4a6e9070823bb24b4531daac8c4627e08ba5de8c5ef2f2752d,https://crates.io/crates/ndarray/0.17.2,cargo/ndarray-0.17.2
+nom,7.1.3,MIT,MIT,d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a,https://crates.io/crates/nom/7.1.3,cargo/nom-7.1.3
+num-complex,0.4.6,MIT OR Apache-2.0,MIT,73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495,https://crates.io/crates/num-complex/0.4.6,cargo/num-complex-0.4.6
+num-integer,0.1.47,MIT OR Apache-2.0,MIT,7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b,https://crates.io/crates/num-integer/0.1.47,cargo/num-integer-0.1.47
+num-traits,0.2.19,MIT OR Apache-2.0,MIT,071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841,https://crates.io/crates/num-traits/0.2.19,cargo/num-traits-0.2.19
+num_cpus,1.17.0,MIT OR Apache-2.0,MIT,91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b,https://crates.io/crates/num_cpus/1.17.0,cargo/num_cpus-1.17.0
+numpy,0.29.0,BSD-2-Clause,BSD-2-Clause,6a5b15d63a5ff39e378daed0e1340d3a5964703ea9712eb09a0dc66fade996f4,https://crates.io/crates/numpy/0.29.0,cargo/numpy-0.29.0
+once_cell,1.21.4,MIT OR Apache-2.0,MIT,9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50,https://crates.io/crates/once_cell/1.21.4,cargo/once_cell-1.21.4
+pkg-config,0.3.33,MIT OR Apache-2.0,MIT,19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e,https://crates.io/crates/pkg-config/0.3.33,cargo/pkg-config-0.3.33
+portable-atomic-util,0.2.8,Apache-2.0 OR MIT,MIT,10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715,https://crates.io/crates/portable-atomic-util/0.2.8,cargo/portable-atomic-util-0.2.8
+portable-atomic,1.15.0,Apache-2.0 OR MIT,MIT,05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85,https://crates.io/crates/portable-atomic/1.15.0,cargo/portable-atomic-1.15.0
+ppv-lite86,0.2.21,MIT OR Apache-2.0,MIT,85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9,https://crates.io/crates/ppv-lite86/0.2.21,cargo/ppv-lite86-0.2.21
+proc-macro2,1.0.106,MIT OR Apache-2.0,MIT,8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934,https://crates.io/crates/proc-macro2/1.0.106,cargo/proc-macro2-1.0.106
+proc-macro2,1.0.107,MIT OR Apache-2.0,MIT,985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9,https://crates.io/crates/proc-macro2/1.0.107,cargo/proc-macro2-1.0.107
+pyo3-build-config,0.29.2,MIT OR Apache-2.0,MIT,f41027e41b4bd03f6e60f9f417fe24a6341a6bb744edd62b6f709f2a52ea30e9,https://crates.io/crates/pyo3-build-config/0.29.2,cargo/pyo3-build-config-0.29.2
+pyo3-ffi,0.29.2,MIT OR Apache-2.0,MIT,e591a95526fead067432c3b3a33fc74770b87b1e04e73671090d9c2055a2b327,https://crates.io/crates/pyo3-ffi/0.29.2,cargo/pyo3-ffi-0.29.2
+pyo3-macros-backend,0.29.2,MIT OR Apache-2.0,MIT,571575aa3749fa6216757dd47d2a3e7ef360f329a40f0666a9fbd14889024952,https://crates.io/crates/pyo3-macros-backend/0.29.2,cargo/pyo3-macros-backend-0.29.2
+pyo3-macros,0.29.2,MIT OR Apache-2.0,MIT,73225868fc1cd84eef2c3c230ddb91273bf1de46aeb8a4248da76d32a0924a1c,https://crates.io/crates/pyo3-macros/0.29.2,cargo/pyo3-macros-0.29.2
+pyo3,0.29.2,MIT OR Apache-2.0,MIT,4688ddedf473e32662b9b067670129a8afb8c18e351482c70d62ba4a88171e8b,https://crates.io/crates/pyo3/0.29.2,cargo/pyo3-0.29.2
+quote,1.0.46,MIT OR Apache-2.0,MIT,dfbc457d0c7a0759a614551b11a6409e5951f6c7537be1f1b7682b9ae9230368,https://crates.io/crates/quote/1.0.46,cargo/quote-1.0.46
+quote,1.0.47,MIT OR Apache-2.0,MIT,1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001,https://crates.io/crates/quote/1.0.47,cargo/quote-1.0.47
+rand,0.8.6,MIT OR Apache-2.0,MIT,5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a,https://crates.io/crates/rand/0.8.6,cargo/rand-0.8.6
+rand,0.8.8,MIT OR Apache-2.0,MIT,e058c7de0b26af77780c769414d6257830bb240f3c38477dbc2c16e5f54d6d4c,https://crates.io/crates/rand/0.8.8,cargo/rand-0.8.8
+rand_chacha,0.3.1,MIT OR Apache-2.0,MIT,e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88,https://crates.io/crates/rand_chacha/0.3.1,cargo/rand_chacha-0.3.1
+rand_core,0.6.4,MIT OR Apache-2.0,MIT,ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c,https://crates.io/crates/rand_core/0.6.4,cargo/rand_core-0.6.4
+rawpointer,0.2.1,MIT/Apache-2.0,MIT,60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3,https://crates.io/crates/rawpointer/0.2.1,cargo/rawpointer-0.2.1
+rayon-core,1.13.0,MIT OR Apache-2.0,MIT,22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91,https://crates.io/crates/rayon-core/1.13.0,cargo/rayon-core-1.13.0
+rayon,1.12.0,MIT OR Apache-2.0,MIT,fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d,https://crates.io/crates/rayon/1.12.0,cargo/rayon-1.12.0
+regex-automata,0.4.15,MIT OR Apache-2.0,MIT,1f388202e4b80542a0921078cc23b6333bcf1409c1e3f86404cae4766a6131db,https://crates.io/crates/regex-automata/0.4.15,cargo/regex-automata-0.4.15
+regex-syntax,0.8.11,MIT OR Apache-2.0,MIT,d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4,https://crates.io/crates/regex-syntax/0.8.11,cargo/regex-syntax-0.8.11
+regex,1.13.0,MIT OR Apache-2.0,MIT,2a0e75113e14dc5acb068cd0786884f214f1312650a3d36d269f5c4f3cdee8a2,https://crates.io/crates/regex/1.13.0,cargo/regex-1.13.0
+rustc-hash,2.1.3,Apache-2.0 OR MIT,MIT,6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d,https://crates.io/crates/rustc-hash/2.1.3,cargo/rustc-hash-2.1.3
+serde,1.0.228,MIT OR Apache-2.0,MIT,9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e,https://crates.io/crates/serde/1.0.228,cargo/serde-1.0.228
+serde,1.0.229,MIT OR Apache-2.0,MIT,4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba,https://crates.io/crates/serde/1.0.229,cargo/serde-1.0.229
+serde_core,1.0.228,MIT OR Apache-2.0,MIT,41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad,https://crates.io/crates/serde_core/1.0.228,cargo/serde_core-1.0.228
+serde_core,1.0.229,MIT OR Apache-2.0,MIT,67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48,https://crates.io/crates/serde_core/1.0.229,cargo/serde_core-1.0.229
+serde_derive,1.0.228,MIT OR Apache-2.0,MIT,d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79,https://crates.io/crates/serde_derive/1.0.228,cargo/serde_derive-1.0.228
+serde_derive,1.0.229,MIT OR Apache-2.0,MIT,e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348,https://crates.io/crates/serde_derive/1.0.229,cargo/serde_derive-1.0.229
+serde_json,1.0.150,MIT OR Apache-2.0,MIT,e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9,https://crates.io/crates/serde_json/1.0.150,cargo/serde_json-1.0.150
+serde_json,1.0.151,MIT OR Apache-2.0,MIT,c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14,https://crates.io/crates/serde_json/1.0.151,cargo/serde_json-1.0.151
+shell-words,1.1.1,MIT/Apache-2.0,MIT,dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77,https://crates.io/crates/shell-words/1.1.1,cargo/shell-words-1.1.1
+shlex,1.3.0,MIT OR Apache-2.0,MIT,0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64,https://crates.io/crates/shlex/1.3.0,cargo/shlex-1.3.0
+shlex,2.0.1,MIT OR Apache-2.0,MIT,f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba,https://crates.io/crates/shlex/2.0.1,cargo/shlex-2.0.1
+smallvec,1.15.2,MIT OR Apache-2.0,MIT,8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90,https://crates.io/crates/smallvec/1.15.2,cargo/smallvec-1.15.2
+syn,2.0.118,MIT OR Apache-2.0,MIT,1b9ae57f904213ebb649ce6895b8a66c66f0203b9319718f69a5612a065b1422,https://crates.io/crates/syn/2.0.118,cargo/syn-2.0.118
+syn,2.0.119,MIT OR Apache-2.0,MIT,872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297,https://crates.io/crates/syn/2.0.119,cargo/syn-2.0.119
+syn,3.0.5,MIT OR Apache-2.0,MIT,12df2e0110f65b775f769bb17ef989067a1d931b2eb822bd4346631eeada89f9,https://crates.io/crates/syn/3.0.5,cargo/syn-3.0.5
+target-lexicon,0.13.5,Apache-2.0 WITH LLVM-exception,Apache-2.0 WITH LLVM-exception,adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca,https://crates.io/crates/target-lexicon/0.13.5,cargo/target-lexicon-0.13.5
+thiserror-impl,2.0.18,MIT OR Apache-2.0,MIT,ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5,https://crates.io/crates/thiserror-impl/2.0.18,cargo/thiserror-impl-2.0.18
+thiserror,2.0.18,MIT OR Apache-2.0,MIT,4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4,https://crates.io/crates/thiserror/2.0.18,cargo/thiserror-2.0.18
+thread-tree,0.3.3,MIT OR Apache-2.0,MIT,ffbd370cb847953a25954d9f63e14824a36113f8c72eecf6eccef5dc4b45d630,https://crates.io/crates/thread-tree/0.3.3,cargo/thread-tree-0.3.3
+unicode-ident,1.0.24,(MIT OR Apache-2.0) AND Unicode-3.0,MIT AND Unicode-3.0,e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75,https://crates.io/crates/unicode-ident/1.0.24,cargo/unicode-ident-1.0.24
+wasi,0.11.1+wasi-snapshot-preview1,Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT,MIT,ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b,https://crates.io/crates/wasi/0.11.1+wasi-snapshot-preview1,cargo/wasi-0.11.1+wasi-snapshot-preview1
+windows-link,0.2.1,MIT OR Apache-2.0,MIT,f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5,https://crates.io/crates/windows-link/0.2.1,cargo/windows-link-0.2.1
+zerocopy-derive,0.8.52,BSD-2-Clause OR Apache-2.0 OR MIT,MIT,1ae7f38b72ec2a254e2b87ef277cf2cd4fb97cbebf944faa6f33354da0867930,https://crates.io/crates/zerocopy-derive/0.8.52,cargo/zerocopy-derive-0.8.52
+zerocopy-derive,0.8.57,BSD-2-Clause OR Apache-2.0 OR MIT,MIT,146c01f5ab44258da43cf276c74a2763db2ff3969c9c652c3f2de07041d0b2bc,https://crates.io/crates/zerocopy-derive/0.8.57,cargo/zerocopy-derive-0.8.57
+zerocopy,0.8.52,BSD-2-Clause OR Apache-2.0 OR MIT,MIT,ce1022995ff5ff5d841ad7d994facc23098cd40152f2c1d11cd607c6f530653f,https://crates.io/crates/zerocopy/0.8.52,cargo/zerocopy-0.8.52
+zerocopy,0.8.57,BSD-2-Clause OR Apache-2.0 OR MIT,MIT,d35102a9f36d089ccae9e4c6802bc118be4487b80aaffc0ab4e0cf5ce92d2873,https://crates.io/crates/zerocopy/0.8.57,cargo/zerocopy-0.8.57
+zmij,1.0.21,MIT,MIT,b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa,https://crates.io/crates/zmij/1.0.21,cargo/zmij-1.0.21
+zmij,1.0.23,MIT,MIT,29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b,https://crates.io/crates/zmij/1.0.23,cargo/zmij-1.0.23
