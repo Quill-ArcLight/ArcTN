@@ -1,0 +1,49 @@
+[build-system]
+requires = ["maturin>=1.9.3,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "arctn"
+dynamic = ["version"]
+description = "ArcTN tensor-network pathfinding and execution bindings for Python"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Zhengyi Liu" }]
+keywords = ["tensor-networks", "tensor-contraction", "einsum", "quantum"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = ["numpy>=1.23"]
+
+[project.urls]
+Documentation = "https://quill-arclight.github.io/arctn-docs/"
+Source = "https://github.com/Quill-ArcLight/arctn-public"
+Issues = "https://github.com/Quill-ArcLight/arctn-public/issues"
+
+[project.optional-dependencies]
+execution = [
+    "opt_einsum>=3.3",
+    "cotengra>=0.6",
+]
+quimb = [
+    "opt_einsum>=3.3",
+    "cotengra>=0.6",
+    "quimb>=1.7",
+]
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+python-source = "python"
+module-name = "arctn.arctn_py"
+python-packages = ["arctn"]
+bindings = "pyo3"
+strip = true

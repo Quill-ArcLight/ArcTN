@@ -1,0 +1,67 @@
+[package]
+name = "arctn"
+version = "1.0.0"
+autobins = false
+edition = "2021"
+authors = ["Zhengyi Liu"]
+description = "Tensor-network contraction order optimization, slicing, and execution"
+readme = "README.md"
+build = "build.rs"
+rust-version = "1.82"
+homepage = "https://github.com/Quill-ArcLight/arctn-public"
+documentation = "https://quill-arclight.github.io/arctn-docs/"
+repository = "https://github.com/Quill-ArcLight/arctn-public"
+keywords = ["tensor-network", "tensor-contraction", "einsum", "quantum"]
+categories = ["algorithms", "mathematics", "science"]
+# Include only source, tests, and required documentation in the crates.io package.
+include = [
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/build.rs",
+    "/README.md",
+    "/CONTRIBUTING.md",
+    "/SECURITY.md",
+    "/docs/mpi.md",
+    "/docs/engine-interface.md",
+    # Examples included in the published package.
+    "/examples/*.rs",
+    "/src/**/*.rs",
+    "/tests/**/*.rs",
+    "/tests/fixtures/demo_tiny6.net.json",
+]
+
+[dependencies]
+matrixmultiply = { version = "0.3", features = ["cgemm"] }
+num-complex = "0.4"
+num-traits = "0.2"
+rand = "0.8"
+rand_chacha = "0.3"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libloading = "0.8"
+# MPI is optional; see docs/mpi.md for the supported design.
+mpi = { version = "0.8", optional = true, features = ["complex"] }
+
+[features]
+mpi = ["dep:mpi"]
+# Enable matrixmultiply's GEMM thread pool, capped at four threads.
+# MATMUL_NUM_THREADS controls its size. tnexec avoids nested pools for sliced execution.
+mt = ["matrixmultiply/threading"]
+
+[[bin]]
+name = "tnpath"
+path = "src/bin/tnpath.rs"
+
+[[bin]]
+name = "tnexec"
+path = "src/bin/tnexec.rs"
+
+# Build only when the mpi feature is enabled.
+[[bin]]
+name = "tnmpi"
+path = "src/bin/tnmpi.rs"
+required-features = ["mpi"]
+
+[profile.release]
+debug = true

@@ -1,0 +1,76 @@
+name: Public source tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo test --locked --all-targets
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo doc --locked --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo run --locked --example contraction
+      - run: cargo package --locked
+
+  mpi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libopenmpi-dev openmpi-bin
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --all-features --all-targets
+      - run: cargo clippy --locked --all-features --all-targets -- -D warnings
+      - name: Check all four dtypes with 1, 2 and 4 MPI ranks
+        run: >-
+          cargo test --locked --all-features --test mpi_cli
+          mpi_dtypes_match_known_results -- --ignored --exact
+        env:
+          RAYON_NUM_THREADS: '1'
+          MATMUL_NUM_THREADS: '1'
+
+  python:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pybind
+      - run: python -m pip install "maturin>=1.9.3,<2" pytest numpy opt_einsum cotengra quimb
+      - run: cargo clippy --locked --manifest-path pybind/Cargo.toml -- -D warnings
+      - run: python -m maturin build --release --locked --manifest-path pybind/Cargo.toml --out dist
+      - name: Install the public extension
+        shell: bash
+        run: python -m pip install dist/*.whl
+      - name: Test execution and missing-engine behavior
+        run: python -m pytest -q pybind/tests
+        env:
+          RAYON_NUM_THREADS: '2'
+      - name: Build the source distribution
+        run: python -m maturin sdist --manifest-path pybind/Cargo.toml --out dist

@@ -1,0 +1,33 @@
+[package]
+name = "arctn-py"
+version = "1.0.0"
+edition = "2021"
+authors = ["Zhengyi Liu"]
+description = "Python bindings for the ArcTN tensor-network contraction library"
+readme = "README.md"
+build = "build.rs"
+rust-version = "1.83"
+homepage = "https://github.com/Quill-ArcLight/arctn-public"
+publish = false
+
+# Keep PyO3 out of the core library dependency graph.
+[lib]
+name = "arctn_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+arctn = { path = "..", version = "=1.0.0" }
+# NumPy conversion for DenseTensor execution.
+num-complex = "0.4"
+
+[features]
+# Optional benchmark/production build: enable matrixmultiply's inner-GEMM
+# thread tree in the ArcTN dependency. It is deliberately not a default
+# feature because sliced outer parallelism needs a separate oversubscription
+# policy.
+mt = ["arctn/mt"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3

@@ -1,0 +1,15 @@
+/target/
+/pybind/target/
+/.venv/
+__pycache__/
+*.pyc
+*.so
+*.dylib
+*.dll
+*.a
+*.rlib
+*.whl
+.DS_Store
+.env
+.env.*
+/dist/
