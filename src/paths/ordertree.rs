@@ -360,8 +360,12 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                     let tot = if TRACK_FLOPS && !TRACK_READ_WRITE {
                         let step = step_log2.exp2();
                         let total = cost[i * n + k] + cost[(k + 1) * n + j] + step;
-                        if !step.is_finite() || !total.is_finite() {
-                            return Err("pure-FLOPs linear f64 overflow in leaf-order DP".into());
+                        if step.is_nan() || total.is_nan() {
+                            return Err("pure-FLOPs non-finite cost in leaf-order DP".into());
+                        }
+                        if step.is_infinite() || total.is_infinite() {
+                            // An overflowing non-negative cost cannot beat a finite split.
+                            continue;
                         }
                         total
                     } else {
@@ -385,6 +389,10 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
             cost[i * n + j] = best;
             split[i * n + j] = bk;
         }
+    }
+
+    if TRACK_FLOPS && !TRACK_READ_WRITE && !cost[n - 1].is_finite() {
+        return Err("pure-FLOPs linear f64 overflow in leaf-order DP".into());
     }
 
     // Reconstruct iteratively to avoid recursion on unbalanced trees.
@@ -548,6 +556,64 @@ mod objective_tests {
         let error = order_dp_cooperative_with_objective(&net, &order, None, objective).unwrap_err();
 
         assert!(error.contains("pure-FLOPs linear f64 overflow"), "{error}");
+    }
+
+    #[test]
+    fn pure_flops_order_dp_ignores_an_overflowing_unused_interval() {
+        let (net, expected) = nested_pair_network(vec![1usize << 30; 36]);
+        let objective = PlannerObjective::new(1.0, 0.0).unwrap();
+        let finite = simulate_path(&net, &expected).unwrap();
+        assert!(objective.score_path_log2(&finite).exp2().is_finite());
+        let order: Vec<_> = (0..net.n_tensors()).collect();
+        let (path, stats) = order_dp_cooperative_with_objective(&net, &order, None, objective)
+            .unwrap()
+            .unwrap();
+        assert_eq!(path.len(), expected.len());
+        assert!(objective.score_path_log2(&stats) <= objective.score_path_log2(&finite) + 1e-12);
+    }
+
+    #[test]
+    fn pure_flops_order_dp_ignores_an_overflowing_candidate_sum() {
+        let mut dimensions = vec![1usize << 30; 33];
+        dimensions.push(1usize << 33);
+        let (net, expected) = nested_pair_network(dimensions);
+        let objective = PlannerObjective::new(1.0, 0.0).unwrap();
+        let finite = simulate_path(&net, &expected).unwrap();
+        assert!(objective.score_path_log2(&finite).exp2().is_finite());
+        // Every individual step is representable; only a sum can overflow.
+        let all_legs_log2: f64 = net.size_dict.keys().map(|&leg| net.log2_dim(leg)).sum();
+        assert_eq!(all_legs_log2, 1023.0);
+        assert!(all_legs_log2.exp2().is_finite());
+        let order: Vec<_> = (0..net.n_tensors()).collect();
+        let (path, stats) = order_dp_with_objective(&net, &order, objective).unwrap();
+        assert_eq!(path.len(), expected.len());
+        assert!(objective.score_path_log2(&stats) <= objective.score_path_log2(&finite) + 1e-12);
+    }
+
+    fn nested_pair_network(dimensions: Vec<usize>) -> (TensorNetwork, SsaPath) {
+        let pairs = dimensions.len();
+        let net = TensorNetwork {
+            name: "nested-vector-pairs".into(),
+            inputs: (0..pairs)
+                .chain((0..pairs).rev())
+                .map(|leg| vec![leg as u32])
+                .collect(),
+            output: vec![],
+            size_dict: dimensions
+                .into_iter()
+                .enumerate()
+                .map(|(leg, dim)| (leg as u32, dim))
+                .collect(),
+        };
+        let mut path = vec![(pairs - 1, pairs)];
+        let mut last = 2 * pairs;
+        for offset in 1..pairs {
+            path.push((pairs - 1 - offset, last));
+            last += 1;
+            path.push((pairs + offset, last));
+            last += 1;
+        }
+        (net, path)
     }
 
     #[test]
