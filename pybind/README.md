@@ -97,4 +97,4 @@ Quimb 负责构建张量网络并控制预处理；ArcTN 提供收缩路径，
 使用 Rust CPU 执行器，也支持显式指定外部数组后端。
 输入数组必须已属于所选后端；ArcTN 不会自动将数组传输到 GPU。
 
-[中文文档](https://quill-arclight.github.io/arctn-docs/)
+[中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)

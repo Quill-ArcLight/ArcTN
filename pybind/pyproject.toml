@@ -27,7 +27,7 @@ classifiers = [
 dependencies = ["numpy>=1.23"]
 
 [project.urls]
-Documentation = "https://quill-arclight.github.io/arctn-docs/"
+Documentation = "https://quantumquill.arclightquantum.com/docs/arctn/index.html"
 Source = "https://github.com/Quill-ArcLight/arctn-public"
 Issues = "https://github.com/Quill-ArcLight/arctn-public/issues"
 

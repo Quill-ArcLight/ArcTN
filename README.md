@@ -2,7 +2,7 @@
 
 ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和数值收缩，并通过 Python 接口接入 Quimb、Cotengra 和 opt_einsum。既可向其他工具提供收缩路径，也可直接执行张量网络收缩。
 
-[中文文档](https://quill-arclight.github.io/arctn-docs/)
+[中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
 
 <a id="algorithms-and-execution"></a>
 
