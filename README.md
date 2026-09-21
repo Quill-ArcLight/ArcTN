@@ -72,6 +72,8 @@ fn main() -> Result<(), String> {
 
 ## Python 使用
 
+<a id="python-installation"></a>
+
 ### 安装
 
 安装包含 Light/Heavy 引擎的完整 wheel，无需 Rust。请选择与操作系统、CPU 架构和 Python 版本匹配的安装包，将下面的路径替换为实际文件路径：
@@ -90,9 +92,9 @@ python -m pip install /path/to/arctn-...whl
 
 ### 调用 Light / Heavy
 
-安装包含引擎的完整 wheel 后，Python 接口会自动识别其中的动态库，并在调用 Light/Heavy 时加载，无需额外配置。
+先按[安装步骤](#python-installation)安装包含 Light/Heavy 引擎的完整 wheel，再在同一个 Python 环境中运行下面的代码。使用完整 wheel 不需要克隆源码或安装 Rust，也不需要手动加载动态库。
 
-**Light 和 Heavy 通过同一组函数调用，用 `preset="light"` 或 `preset="heavy"` 选择，不需要分别导入。** 只搜索收缩序时，从 `arctn` 导入 `arctn_path`。下面分别演示两种调用，实际使用时选择其中一种即可：
+**导入的是 `arctn_path` 函数，Light 和 Heavy 由 `preset` 参数选择，不是两个需要单独导入的 Python 模块。** 导入时，Python 接口会自动识别安装包中的引擎动态库；第一次调用搜索函数时再加载并运行它。下面的例子使用 Light：
 
 ```python
 from arctn import arctn_path
@@ -101,15 +103,21 @@ inputs = [["a", "b"], ["b", "c"], ["c", "d"]]
 output = ["a", "d"]
 size_dict = {"a": 2, "b": 3, "c": 4, "d": 2}
 
-light_path = arctn_path(inputs, output, size_dict, preset="light", seed=0)
-heavy_path = arctn_path(inputs, output, size_dict, preset="heavy", seed=0)
-print("Light:", light_path)
-print("Heavy:", heavy_path)
+path = arctn_path(
+    inputs, output, size_dict,
+    preset="light",
+    seed=0,
+)
+print(path)
 ```
 
-这个例子表示三个矩阵的乘积，输入形状分别为 `(2, 3)`、`(3, 4)` 和 `(4, 2)`，输出形状为 `(2, 2)`。搜索只需要索引和维度，不需要矩阵中的数值。返回值是一组二元组，表示每一步收缩哪两个张量；默认使用 opt_einsum 的 linear path 格式，设置 `use_ssa=True` 可返回 SSA path。
+**使用 Heavy 时，只需把 `preset="light"` 改成 `preset="heavy"`，不需要重新安装或更换导入语句。** 未指定 `preset` 时默认使用 Heavy。
 
-未指定 `preset` 时默认使用 Heavy；`seed` 指定搜索使用的随机种子。两种模式使用相同的优化目标参数，默认是 `flops_weight=1, read_write_weight=64`；设置 `read_write_weight=0` 可仅优化 FLOPs。
+`inputs` 按张量顺序列出各自的索引，`output` 指定结果保留的索引及顺序，`size_dict` 给出各索引的维度。这个例子表示三个矩阵的乘积，输入形状分别为 `(2, 3)`、`(3, 4)` 和 `(4, 2)`，输出形状为 `(2, 2)`。
+
+`arctn_path` 只搜索收缩序，不执行数值收缩，因此不需要矩阵中的数值。返回值是一组二元组，表示每一步收缩哪两个张量；默认使用 opt_einsum 的 linear path 格式，设置 `use_ssa=True` 可返回 SSA path。
+
+`seed` 指定搜索使用的随机种子。两种模式使用相同的优化目标参数，默认是 `flops_weight=1, read_write_weight=64`；设置 `read_write_weight=0` 可仅优化 FLOPs。
 
 如果还需要路径指标，改用 `arctn_schedule`。沿用上面的网络定义：
 

@@ -72,6 +72,8 @@ fn main() -> Result<(), String> {
 
 ## Python usage
 
+<a id="python-installation"></a>
+
 ### Installation
 
 A complete wheel containing the Light/Heavy engine can be installed without Rust. Choose a wheel matching your operating system, CPU architecture, and Python version, and replace the placeholder below with its actual file path:
@@ -90,9 +92,9 @@ Building the Python package from this repository requires Python 3.9 or later an
 
 ### Call Light / Heavy
 
-After a complete wheel containing the engine is installed, the Python interface automatically detects the bundled shared library and loads it when Light/Heavy is called. No additional configuration is required.
+Follow the [installation instructions](#python-installation) to install a complete wheel containing the Light/Heavy engine, then run the code below in the same Python environment. With a complete wheel, you do not need to clone the source, install Rust, or load the shared library manually.
 
-**Light and Heavy use the same functions. Select either with `preset="light"` or `preset="heavy"`; no separate imports are needed.** To search for a contraction order, import `arctn_path` from `arctn`. The example below shows both calls; choose one for your application:
+**Import the `arctn_path` function and select Light or Heavy with `preset`; they are not separate Python modules to import.** On import, the Python interface detects the bundled engine library. The library is loaded and used when you first call a search function. This example uses Light:
 
 ```python
 from arctn import arctn_path
@@ -101,15 +103,21 @@ inputs = [["a", "b"], ["b", "c"], ["c", "d"]]
 output = ["a", "d"]
 size_dict = {"a": 2, "b": 3, "c": 4, "d": 2}
 
-light_path = arctn_path(inputs, output, size_dict, preset="light", seed=0)
-heavy_path = arctn_path(inputs, output, size_dict, preset="heavy", seed=0)
-print("Light:", light_path)
-print("Heavy:", heavy_path)
+path = arctn_path(
+    inputs, output, size_dict,
+    preset="light",
+    seed=0,
+)
+print(path)
 ```
 
-This example represents a product of three matrices with shapes `(2, 3)`, `(3, 4)`, and `(4, 2)`, producing a `(2, 2)` result. The search needs only indices and dimensions, not array values. It returns a list of pairs identifying the tensors to contract at each step. The default is opt_einsum's linear path format; set `use_ssa=True` to return an SSA path.
+**To use Heavy, change only `preset="light"` to `preset="heavy"`. No reinstallation or change to the import is needed.** If `preset` is omitted, Heavy is used.
 
-If `preset` is omitted, Heavy is used. `seed` sets the random seed for the search. Both modes use the same objective parameters, with defaults `flops_weight=1, read_write_weight=64`; set `read_write_weight=0` to optimize FLOPs alone.
+`inputs` lists the indices of each tensor in input order, `output` gives the indices to retain and their order, and `size_dict` gives each index's dimension. This example represents a product of three matrices with shapes `(2, 3)`, `(3, 4)`, and `(4, 2)`, producing a `(2, 2)` result.
+
+`arctn_path` searches for a contraction order without performing the numerical contraction, so it does not need array values. It returns a list of pairs identifying the tensors to contract at each step. The default is opt_einsum's linear path format; set `use_ssa=True` to return an SSA path.
+
+`seed` sets the random seed for the search. Both modes use the same objective parameters, with defaults `flops_weight=1, read_write_weight=64`; set `read_write_weight=0` to optimize FLOPs alone.
 
 To obtain path metrics as well, use `arctn_schedule` instead. Reusing the network definition above:
 
