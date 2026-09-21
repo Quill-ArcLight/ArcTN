@@ -28,7 +28,6 @@ Linux、macOS 和 Windows 的 wheel 不能跨平台使用；具体可安装的�
 导入 `arctn` 时会自动识别该动态库，调用 Light/Heavy 时加载，无需额外设置环境变量。
 `arctn_path`、`arctn_schedule`、`arctn_plan` 等高层接口的参数和返回类型保持一致。
 
-含引擎的完整 wheel 目前仅供内部使用，尚未通过 PyPI 或公开 Release 分发。
 源码和动态库分别授权，说明见[源码与 Light / Heavy](../README.md#source-and-availability)。
 
 NumPy 会作为依赖自动安装。如需与 Quimb 和 Cotengra 配合使用，请安装：
