@@ -86,9 +86,59 @@ python -m pip install /path/to/arctn-...whl
 
 从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不包含 Light/Heavy 动态库；调用 Light/Heavy 时需要[单独配置动态库](#engine-library)。
 
+<a id="light-and-heavy-interface"></a>
+
+### 调用 Light / Heavy
+
+安装包含引擎的完整 wheel 后，Python 接口会自动识别其中的动态库，并在调用 Light/Heavy 时加载，无需额外配置。
+
+**Light 和 Heavy 通过同一组函数调用，用 `preset="light"` 或 `preset="heavy"` 选择，不需要分别导入。** 只搜索收缩序时，从 `arctn` 导入 `arctn_path`。下面分别演示两种调用，实际使用时选择其中一种即可：
+
+```python
+from arctn import arctn_path
+
+inputs = [["a", "b"], ["b", "c"], ["c", "d"]]
+output = ["a", "d"]
+size_dict = {"a": 2, "b": 3, "c": 4, "d": 2}
+
+light_path = arctn_path(inputs, output, size_dict, preset="light", seed=0)
+heavy_path = arctn_path(inputs, output, size_dict, preset="heavy", seed=0)
+print("Light:", light_path)
+print("Heavy:", heavy_path)
+```
+
+这个例子表示三个矩阵的乘积，输入形状分别为 `(2, 3)`、`(3, 4)` 和 `(4, 2)`，输出形状为 `(2, 2)`。搜索只需要索引和维度，不需要矩阵中的数值。返回值是一组二元组，表示每一步收缩哪两个张量；默认使用 opt_einsum 的 linear path 格式，设置 `use_ssa=True` 可返回 SSA path。
+
+未指定 `preset` 时默认使用 Heavy；`seed` 指定搜索使用的随机种子。两种模式使用相同的优化目标参数，默认是 `flops_weight=1, read_write_weight=64`；设置 `read_write_weight=0` 可仅优化 FLOPs。
+
+如果还需要路径指标，改用 `arctn_schedule`。沿用上面的网络定义：
+
+```python
+from arctn import arctn_schedule
+
+result = arctn_schedule(inputs, output, size_dict, preset="heavy", seed=0)
+print("Path:", result["path"])
+print("log10 FLOPs:", result["log10_flops"])
+print("log2 largest intermediate:", result["log2_max_size"])
+```
+
+`arctn_schedule` 返回字典，包含最终路径、优化目标的权重、路径指标、可选的切片结果和收缩序优化耗时。上面的 `log10_flops` 是 FLOPs 的以 10 为底的对数，`log2_max_size` 是最大中间张量元素数的以 2 为底的对数。
+
+按需要选择调用入口，不需要依次调用：
+
+| 需求 | 从 `arctn` 导入 | 返回值 |
+| --- | --- | --- |
+| 只搜索收缩序 | `arctn_path` | 一条收缩路径 |
+| 搜索并查看路径指标，或生成切片方案 | `arctn_schedule` | 包含路径和指标的字典 |
+| 搜索后直接执行收缩 | `arctn_contract` | 结果数组；设置 `return_info=True` 时返回 `(result, info)` |
+
+这三个入口都通过 `preset` 选择 Light 或 Heavy。`arctn_contract` 还需要按 `inputs` 的顺序传入 `arrays`，默认使用 Rust CPU 执行器。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md#interfaces)。
+
+`arctn_schedule` 和 `arctn_contract` 接受 `target_size`，限制每个切片中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 的单位是秒，由搜索过程检查，不会由操作系统强制终止进程。
+
 ### 执行已有收缩路径
 
-以下示例编译并执行矩阵乘法的收缩路径，不需要 Light/Heavy：
+如果已经有收缩路径，可直接编译并执行，不需要调用 Light/Heavy。以下是一个独立的矩阵乘法示例：
 
 ```python
 import numpy as np
@@ -101,23 +151,6 @@ a = np.arange(6, dtype=np.float64).reshape(2, 3)
 b = np.arange(6, dtype=np.float64).reshape(3, 2)
 np.testing.assert_allclose(compiled([a, b]), a @ b)
 ```
-
-<a id="light-and-heavy-interface"></a>
-
-### 调用 Light / Heavy
-
-安装包含引擎的完整 wheel 后，Python 接口会自动识别其中的动态库，并在调用 Light/Heavy 时加载，无需额外配置。沿用上面的网络定义：
-
-```python
-from arctn import arctn_schedule
-
-result = arctn_schedule(inputs, output, sizes, preset="heavy", seed=0)
-print(result["path"], result["log10_flops"])
-```
-
-使用 Light 时，将 `preset` 改为 `"light"`。返回信息包含最终路径、优化目标的权重、路径指标、可选的切片结果和收缩序优化耗时。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md)。
-
-`target_size` 限制每个切片中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 是搜索过程检查的时间限制，不会由操作系统强制终止进程。
 
 <a id="engine-library"></a>
 

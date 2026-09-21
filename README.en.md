@@ -86,9 +86,59 @@ The activation command above is for macOS and Linux. In Windows PowerShell, use 
 
 Building the Python package from this repository requires Python 3.9 or later and Rust 1.83 or later. Follow the [source installation instructions (Chinese)](pybind/README.md#source-installation). A source installation does not include the Light/Heavy shared library; [configure it separately](#engine-library) to use Light/Heavy.
 
+<a id="light-and-heavy-interface"></a>
+
+### Call Light / Heavy
+
+After a complete wheel containing the engine is installed, the Python interface automatically detects the bundled shared library and loads it when Light/Heavy is called. No additional configuration is required.
+
+**Light and Heavy use the same functions. Select either with `preset="light"` or `preset="heavy"`; no separate imports are needed.** To search for a contraction order, import `arctn_path` from `arctn`. The example below shows both calls; choose one for your application:
+
+```python
+from arctn import arctn_path
+
+inputs = [["a", "b"], ["b", "c"], ["c", "d"]]
+output = ["a", "d"]
+size_dict = {"a": 2, "b": 3, "c": 4, "d": 2}
+
+light_path = arctn_path(inputs, output, size_dict, preset="light", seed=0)
+heavy_path = arctn_path(inputs, output, size_dict, preset="heavy", seed=0)
+print("Light:", light_path)
+print("Heavy:", heavy_path)
+```
+
+This example represents a product of three matrices with shapes `(2, 3)`, `(3, 4)`, and `(4, 2)`, producing a `(2, 2)` result. The search needs only indices and dimensions, not array values. It returns a list of pairs identifying the tensors to contract at each step. The default is opt_einsum's linear path format; set `use_ssa=True` to return an SSA path.
+
+If `preset` is omitted, Heavy is used. `seed` sets the random seed for the search. Both modes use the same objective parameters, with defaults `flops_weight=1, read_write_weight=64`; set `read_write_weight=0` to optimize FLOPs alone.
+
+To obtain path metrics as well, use `arctn_schedule` instead. Reusing the network definition above:
+
+```python
+from arctn import arctn_schedule
+
+result = arctn_schedule(inputs, output, size_dict, preset="heavy", seed=0)
+print("Path:", result["path"])
+print("log10 FLOPs:", result["log10_flops"])
+print("log2 largest intermediate:", result["log2_max_size"])
+```
+
+`arctn_schedule` returns a dictionary containing the final path, objective weights, path metrics, optional slicing results, and contraction order optimization time. Here, `log10_flops` is the base-10 logarithm of the FLOP count, and `log2_max_size` is the base-2 logarithm of the number of elements in the largest intermediate tensor.
+
+Choose the function for the result you need; these are not sequential steps:
+
+| Task | Import from `arctn` | Return value |
+| --- | --- | --- |
+| Search for a contraction order | `arctn_path` | A contraction path |
+| Search and obtain path metrics, or select sliced indices | `arctn_schedule` | A dictionary containing the path and metrics |
+| Search and execute the contraction | `arctn_contract` | The result array, or `(result, info)` with `return_info=True` |
+
+All three functions select Light or Heavy through `preset`. `arctn_contract` also requires `arrays` in the same order as `inputs` and uses the Rust CPU executor by default. See the [Python interface guide (Chinese)](pybind/README.md#interfaces) for other interfaces and Quimb usage.
+
+`arctn_schedule` and `arctn_contract` accept `target_size`, which limits the number of elements in any single intermediate tensor produced within each slice, not the process's total memory use. `max_time` is measured in seconds and checked by the search itself; it does not cause the operating system to terminate the process.
+
 ### Execute an existing contraction path
 
-This example compiles and executes a matrix multiplication path without Light/Heavy:
+If you already have a contraction path, you can compile and execute it without calling Light/Heavy. This is a separate matrix multiplication example:
 
 ```python
 import numpy as np
@@ -101,23 +151,6 @@ a = np.arange(6, dtype=np.float64).reshape(2, 3)
 b = np.arange(6, dtype=np.float64).reshape(3, 2)
 np.testing.assert_allclose(compiled([a, b]), a @ b)
 ```
-
-<a id="light-and-heavy-interface"></a>
-
-### Call Light / Heavy
-
-After a complete wheel containing the engine is installed, the Python interface automatically detects the bundled shared library and loads it when Light/Heavy is called. No additional configuration is required. Reusing the network definition above:
-
-```python
-from arctn import arctn_schedule
-
-result = arctn_schedule(inputs, output, sizes, preset="heavy", seed=0)
-print(result["path"], result["log10_flops"])
-```
-
-Set `preset="light"` to use Light. The result includes the final path, objective weights, path metrics, optional slicing results, and contraction order optimization time. See the [Python interface guide (Chinese)](pybind/README.md) for other interfaces and Quimb usage.
-
-`target_size` limits the number of elements in any single intermediate tensor produced within each slice, not the process's total memory use. `max_time` is a time limit checked by the search itself; it does not cause the operating system to terminate the process.
 
 <a id="engine-library"></a>
 
