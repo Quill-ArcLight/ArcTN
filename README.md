@@ -58,13 +58,15 @@ cargo run --example contraction
 
 ### 安装
 
-安装包含 Light/Heavy 引擎的完整 wheel，无需 Rust。请选择与操作系统、CPU 架构和 Python 版本匹配的安装包，将下面的路径替换为实际文件路径：
+安装包含 Light/Heavy 引擎的 ArcTN 1.0.0 完整 wheel，无需 Rust。先获取与操作系统、CPU 架构和 Python 版本匹配的安装包，在该 wheel 文件所在的目录打开终端，然后运行：
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install /path/to/arctn-...whl
+python -m pip install --find-links=. arctn==1.0.0
 ```
+
+`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。NumPy 等依赖会自动安装。
 
 以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。具体支持的组合以发布的安装包为准。
 

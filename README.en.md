@@ -58,13 +58,15 @@ cargo run --example contraction
 
 ### Installation
 
-A complete wheel containing the Light/Heavy engine can be installed without Rust. Choose a wheel matching your operating system, CPU architecture, and Python version, and replace the placeholder below with its actual file path:
+A complete ArcTN 1.0.0 wheel containing the Light/Heavy engine can be installed without Rust. Obtain a wheel matching your operating system, CPU architecture, and Python version, open a terminal in the directory containing that file, and run:
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install /path/to/arctn-...whl
+python -m pip install --find-links=. arctn==1.0.0
 ```
+
+`arctn==1.0.0` selects the version to install. `--find-links=.` also searches the current directory for compatible wheels, so you do not need to enter the filename. Dependencies such as NumPy are installed automatically.
 
 The activation command above is for macOS and Linux. In Windows PowerShell, use `.venv\Scripts\Activate.ps1`. Supported combinations depend on the released wheels.
 

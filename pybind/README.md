@@ -10,16 +10,18 @@ Python 包提供收缩序优化、路径保存与加载、切片和数值收缩�
 
 ## 安装完整 wheel
 
-以下步骤适用于已获得完整 wheel 的用户，安装时不需要 Rust。
+以下步骤适用于已获得 ArcTN 1.0.0 完整 wheel 的用户，安装时不需要 Rust。
 请选择与操作系统、CPU 架构和 Python 版本匹配的文件。
 源码支持 Python 3.9 及以上版本；预编译 wheel 支持的 Python 版本以实际提供的文件为准。
-将下面的路径替换为实际的 wheel 文件路径：
+在该 wheel 文件所在的目录打开终端，然后运行：
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install /path/to/arctn-...whl
+python -m pip install --find-links=. arctn==1.0.0
 ```
+
+`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。
 
 在 Windows PowerShell 中，请改用 `.venv\Scripts\Activate.ps1` 激活虚拟环境。
 Linux、macOS 和 Windows 的 wheel 不能跨平台使用；具体可安装的组合以实际提供的文件为准。
