@@ -48,24 +48,6 @@ cargo test
 cargo run --example contraction
 ```
 
-以下随机贪心示例不依赖 Light/Heavy 动态库：
-
-```rust
-use arctn::{random_greedy, TensorNetwork};
-
-fn main() -> Result<(), String> {
-    let net = TensorNetwork {
-        name: "matrix_product".into(),
-        inputs: vec![vec![0, 1], vec![1, 2]],
-        output: vec![0, 2],
-        size_dict: [(0, 2), (1, 3), (2, 2)].into_iter().collect(),
-    };
-    let (path, stats) = random_greedy(&net, 16, 0)?;
-    println!("path: {path:?}; log10 FLOPs: {}", stats.log10_flops);
-    Ok(())
-}
-```
-
 `RAYON_NUM_THREADS` 设置默认 Rayon 线程池的线程数，应用也可以使用自己的 Rayon 线程池。Cargo 的 `mt` feature 启用独立的矩阵乘法线程池；与切片并行同时使用时，应控制总线程数，避免超过可用 CPU 核数。
 
 <a id="python"></a>

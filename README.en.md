@@ -48,24 +48,6 @@ cargo test
 cargo run --example contraction
 ```
 
-This random-greedy example does not require the Light/Heavy shared library:
-
-```rust
-use arctn::{random_greedy, TensorNetwork};
-
-fn main() -> Result<(), String> {
-    let net = TensorNetwork {
-        name: "matrix_product".into(),
-        inputs: vec![vec![0, 1], vec![1, 2]],
-        output: vec![0, 2],
-        size_dict: [(0, 2), (1, 3), (2, 2)].into_iter().collect(),
-    };
-    let (path, stats) = random_greedy(&net, 16, 0)?;
-    println!("path: {path:?}; log10 FLOPs: {}", stats.log10_flops);
-    Ok(())
-}
-```
-
 `RAYON_NUM_THREADS` sets the size of the default Rayon thread pool. Applications can also use their own Rayon pools. The Cargo `mt` feature enables a separate matrix multiplication thread pool. When combining it with parallel slice execution, limit the total number of threads to avoid oversubscribing the available CPU cores.
 
 <a id="python"></a>
