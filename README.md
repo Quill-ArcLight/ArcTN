@@ -1,5 +1,7 @@
 # ArcTN
 
+**简体中文** | [English](https://github.com/Quill-ArcLight/ArcTN/blob/main/README.en.md)
+
 ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和数值收缩，并通过 Python 接口接入 Quimb、Cotengra 和 opt_einsum。既可向其他工具提供收缩路径，也可直接执行张量网络收缩。
 
 [中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
@@ -48,13 +50,17 @@ cargo run --example contraction
 ```rust
 use arctn::{random_greedy, TensorNetwork};
 
-let net = TensorNetwork {
-    name: "matrix_product".into(),
-    inputs: vec![vec![0, 1], vec![1, 2]],
-    output: vec![0, 2],
-    size_dict: [(0, 2), (1, 3), (2, 2)].into_iter().collect(),
-};
-let (path, stats) = random_greedy(&net, 16, 0)?;
+fn main() -> Result<(), String> {
+    let net = TensorNetwork {
+        name: "matrix_product".into(),
+        inputs: vec![vec![0, 1], vec![1, 2]],
+        output: vec![0, 2],
+        size_dict: [(0, 2), (1, 3), (2, 2)].into_iter().collect(),
+    };
+    let (path, stats) = random_greedy(&net, 16, 0)?;
+    println!("path: {path:?}; log10 FLOPs: {}", stats.log10_flops);
+    Ok(())
+}
 ```
 
 `RAYON_NUM_THREADS` 设置默认 Rayon 线程池的线程数，应用也可以使用自己的 Rayon 线程池。Cargo 的 `mt` feature 启用独立的矩阵乘法线程池；与切片并行同时使用时，应控制总线程数，避免超过可用 CPU 核数。
@@ -126,4 +132,4 @@ macOS 使用对应的 `.dylib`；Windows 使用 `.dll`，PowerShell 的设置方
 
 ## 许可证
 
-公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖及此前已按 MIT/Apache 授出的版本保留各自权利，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库单独许可，本许可证不授权其分发或使用。
+公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖保留各自许可证。第三方声明及早期开发版本中保留的许可文本说明，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库单独许可，本许可证不授权其分发或使用。
