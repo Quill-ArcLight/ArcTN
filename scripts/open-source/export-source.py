@@ -15,7 +15,7 @@ import zipfile
 from audit import ROOT, REPORTS, write_json
 from advisory_policy import evaluate
 
-ROOT_FILES = {".gitignore", ".gitattributes", "Cargo.toml", "Cargo.lock", "build.rs", "README.md",
+ROOT_FILES = {".gitignore", ".gitattributes", "Cargo.toml", "Cargo.lock", "build.rs", "README.md", "README.en.md",
               "LICENSE", "CONTRIBUTING.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "deny.toml"}
 PREFIXES = ("src/", "tests/", "examples/", "THIRD_PARTY_LICENSES/", "scripts/open-source/", ".github/workflows/",
             "pybind/src/", "pybind/python/", "pybind/tests/", "pybind/licenses/")

@@ -13,11 +13,12 @@ ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和�
 - 收缩序优化：贪心、随机贪心、子集动态规划、固定叶序动态规划和超图二分。
 - 收缩树优化：子树重构、模拟退火和并行回火（parallel tempering）。
 - 网络化简，以及从化简网络的收缩路径重建原网络的路径。
-- 固定收缩路径的切片，以及允许局部改进路径的动态切片。
-- 实数和复数稠密张量的 CPU 收缩，收缩路径编译、保存与重复执行，以及路径缓存。
+- 固定收缩路径的切片，以及允许局部调整收缩路径的动态切片。
+- 实数和复数稠密张量的 CPU 收缩。
+- 收缩路径和切片信息的保存、路径编译与重复执行，以及路径缓存。
 - NumPy 和显式指定的外部数组后端；可选的 MPI 切片并行执行。
 
-输入由各张量的 index、输出 index 和维度组成，数值执行时再提供对应数组。量子电路到张量网络的转换由 Quimb 等前端完成，ArcTN 接收转换后的张量网络。
+网络结构由各输入张量的索引（index）、输出索引和相应维度定义；数值执行时另行提供对应的张量数组。量子电路到张量网络的转换由 Quimb 等前端完成，ArcTN 接收转换后的张量网络。
 
 <a id="source-and-availability"></a>
 
@@ -25,9 +26,13 @@ ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和�
 
 本仓库公开独立算法、网络与路径类型、切片、数值执行、Python 接口和命令行工具。公司有权授权的源码采用 **[Arclight 非商业源码可用许可证 1.0](LICENSE)**，禁止商用和闭源集成；这不是 OSI 标准开源许可。
 
-**Light 和 Heavy 的实现闭源，本仓库保留调用接口。** 从本仓库源码构建的 Rust crate 和 Python wheel 不包含该引擎。Rust 独立算法、CLI 的 `--method greedy` 和张量数值收缩可直接使用；Python 可执行已有收缩路径、切片和网络化简。使用 `arctn_path`、`arctn_schedule`、`arctn_plan` 等接口调用 Light/Heavy，需要另行提供兼容且已获授权的动态库。
+**Light 和 Heavy 的实现闭源，本仓库提供调用接口。** 从本仓库源码构建的 Rust crate 和 Python wheel 不包含该引擎。没有引擎时，仍可使用 Rust 独立算法、CLI 的 `--method greedy` 和张量数值收缩；Python 可执行已有收缩路径及给定的切片方案，并进行网络化简。
 
-[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。MPI 是可选的切片并行执行功能，通过 `tnmpi` 按已保存的收缩路径计算分配给各进程的切片，并汇总结果。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
+通过 `arctn_path`、`arctn_schedule`、`arctn_plan` 等接口使用 Light/Heavy，需要安装包含引擎的完整 wheel，或单独配置兼容且已获授权的动态库。安装方法见 [Python 使用](#python)。
+
+[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。
+
+MPI 是可选的切片并行执行功能。`tnmpi` 将切片分配给各进程，按已保存的收缩路径执行计算，最后对各进程的结果求和。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
 
 <a id="rust"></a>
 
@@ -69,9 +74,7 @@ fn main() -> Result<(), String> {
 
 ### 安装
 
-从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不附带 Light/Heavy 动态库。
-
-如果已获得含引擎的完整 wheel，可以直接安装，无需 Rust。请选择与操作系统、CPU 架构和 Python 版本匹配的安装包，将下面的路径替换为实际文件路径：
+安装包含 Light/Heavy 引擎的完整 wheel，无需 Rust。请选择与操作系统、CPU 架构和 Python 版本匹配的安装包，将下面的路径替换为实际文件路径：
 
 ```sh
 python -m venv .venv
@@ -79,7 +82,9 @@ source .venv/bin/activate
 python -m pip install /path/to/arctn-...whl
 ```
 
-以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。不同系统、CPU 架构和 Python 版本使用不同 wheel，具体以提供的安装包为准。
+以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。具体支持的组合以发布的安装包为准。
+
+从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不包含 Light/Heavy 动态库；调用 Light/Heavy 时需要[单独配置动态库](#engine-library)。
 
 ### 执行已有收缩路径
 
@@ -101,7 +106,7 @@ np.testing.assert_allclose(compiled([a, b]), a @ b)
 
 ### 调用 Light / Heavy
 
-完整安装包会自动加载其中的动态库，不需要额外配置。沿用上面的网络定义：
+安装包含引擎的完整 wheel 后，Python 接口会自动识别其中的动态库，并在调用 Light/Heavy 时加载，无需额外配置。沿用上面的网络定义：
 
 ```python
 from arctn import arctn_schedule
@@ -110,13 +115,15 @@ result = arctn_schedule(inputs, output, sizes, preset="heavy", seed=0)
 print(result["path"], result["log10_flops"])
 ```
 
-使用 Light 时，将 `preset` 改为 `"light"`。返回信息包含最终路径、目标权重、路径指标、可选切片结果和收缩序优化耗时。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md)。
+使用 Light 时，将 `preset` 改为 `"light"`。返回信息包含最终路径、优化目标的权重、路径指标、可选的切片结果和收缩序优化耗时。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md)。
 
-`target_size` 限制每个 slice 中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 由搜索过程检查并退出，不是操作系统强制终止进程的超时限制。
+`target_size` 限制每个切片中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 是搜索过程检查的时间限制，不会由操作系统强制终止进程。
+
+<a id="engine-library"></a>
 
 ### 单独配置 Light/Heavy 动态库
 
-Rust 调用、Python 源码安装，或需要指定其他兼容动态库时，在首次调用 Light/Heavy 前设置绝对路径：
+从 Rust 调用 Light/Heavy、使用 Python 源码安装，或需要指定其他兼容动态库时，在首次调用前设置动态库的绝对路径：
 
 ```sh
 export ARCTN_ENGINE_LIBRARY=/absolute/path/to/libarctn_engine.so

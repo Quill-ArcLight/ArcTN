@@ -2,9 +2,9 @@
 
 Python 包提供收缩序优化、路径保存与加载、切片和数值收缩接口。
 
-从本仓库安装请使用[从源码安装](#source-installation)。该方式不附带 Light/Heavy 引擎，
-可以执行已有路径、切片和网络化简。Light/Heavy 收缩序优化需要单独提供的动态库，
-或包含该动态库的完整 wheel。
+从本仓库构建 Python 包，请参阅[源码安装](#source-installation)。该方式不包含 Light/Heavy 引擎，
+但可以执行已有收缩路径及给定的切片方案，并进行网络化简。
+使用 Light/Heavy，需要安装包含引擎的完整 wheel，或单独配置兼容且已获授权的动态库。
 
 <a id="complete-wheel-installation"></a>
 
@@ -12,8 +12,8 @@ Python 包提供收缩序优化、路径保存与加载、切片和数值收缩�
 
 以下步骤适用于已获得完整 wheel 的用户，安装时不需要 Rust。
 请选择与操作系统、CPU 架构和 Python 版本匹配的文件。
-目前跨平台构建使用 CPython 3.12 和 3.13；源码支持 Python 3.9 及以上版本，
-但这不表示每个 Python 版本都有对应的预编译 wheel。将下面的路径替换为实际的 wheel 文件路径：
+源码支持 Python 3.9 及以上版本；预编译 wheel 支持的 Python 版本以实际提供的文件为准。
+将下面的路径替换为实际的 wheel 文件路径：
 
 ```sh
 python -m venv .venv
@@ -48,8 +48,8 @@ python -m pip install "maturin>=1.9.3,<2"
 python -m maturin develop --release --manifest-path pybind/Cargo.toml
 ```
 
-从本仓库源码构建的包不包含 Light/Heavy 动态库，但仍可按给定路径执行收缩、化简张量网络，
-以及使用其他独立功能。如需使用 Light 或 Heavy，需要提供兼容且已获授权的动态库，
+从本仓库源码构建的包不包含 Light/Heavy 动态库，但仍可执行给定的收缩路径与切片方案，
+并进行网络化简。如需使用 Light 或 Heavy，需要提供兼容且已获授权的动态库，
 并在首次调用搜索接口前，将 `ARCTN_ENGINE_LIBRARY` 设置为该库的绝对路径。
 显式设置此变量时，会优先使用指定的动态库。
 平台支持与 ABI 要求详见[动态库接口说明](../docs/engine-interface.md)。

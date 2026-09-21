@@ -26,8 +26,9 @@ class ExportBoundary(unittest.TestCase):
             self.assertFalse(module.allowed(path, b"text"))
 
     def test_required_source_is_allowed(self):
-        for path in ["src/lib.rs", "Cargo.lock", "LICENSE", "pybind/licenses/LICENSE", "tests/fixtures/demo_tiny6.net.json"]:
-            self.assertTrue(module.allowed(path, b"text"))
+        for path in ["src/lib.rs", "Cargo.lock", "README.md", "README.en.md", "LICENSE", "pybind/licenses/LICENSE", "tests/fixtures/demo_tiny6.net.json"]:
+            with self.subTest(path=path):
+                self.assertTrue(module.allowed(path, b"text"))
 
 
 if __name__ == "__main__":
