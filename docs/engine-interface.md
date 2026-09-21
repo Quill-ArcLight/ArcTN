@@ -33,10 +33,11 @@ platform are currently available. Without an engine, Light/Heavy calls
 return an installation error; independent algorithms and execution of supplied
 paths remain available.
 
-Complete wheels are currently supplied for internal use only, with no PyPI or
-public binary release. The Arclight Noncommercial Source-Available License 1.0 excludes the
-private engine. The engine requires separate terms; external distribution
-terms have not been established.
+Complete wheels containing the engine are currently supplied for internal use
+only, with no PyPI or public GitHub Release distribution. The engine is licensed
+separately and is not covered by this repository's source license. External use
+or redistribution requires separate authorization; see
+[source and engine availability](../README.md#source-and-availability).
 
 ## C ABI, version 1
 

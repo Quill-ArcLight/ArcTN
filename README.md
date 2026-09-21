@@ -21,21 +21,13 @@ ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和�
 
 ## 源码与 Light / Heavy
 
-本仓库包含独立算法、网络与路径类型、切片、数值执行、Python 接口和命令行工具，公司有权授权的源码采用 **Arclight 非商业源码可用许可证 1.0**，禁止商用和闭源集成；这不是 OSI 标准开源许可。仓库目前保持私有，克隆需要访问权限。
+本仓库公开独立算法、网络与路径类型、切片、数值执行、Python 接口和命令行工具。公司有权授权的源码采用 **[Arclight 非商业源码可用许可证 1.0](LICENSE)**，禁止商用和闭源集成；这不是 OSI 标准开源许可。
 
-**Light 和 Heavy 的实现闭源，本仓库保留调用接口。** 完整 Python 安装包包含编译后的 Light/Heavy 动态库，导入 `arctn` 时会自动识别，调用 Light/Heavy 时加载；从本仓库源码构建则不包含该动态库，但可以使用独立算法和数值执行功能。
+**Light 和 Heavy 的实现闭源，本仓库保留调用接口。** 从本仓库源码构建的 Rust crate 和 Python wheel 不包含该引擎。Rust 独立算法、CLI 的 `--method greedy` 和张量数值收缩可直接使用；Python 可执行已有收缩路径、切片和网络化简。使用 `arctn_path`、`arctn_schedule`、`arctn_plan` 等接口调用 Light/Heavy，需要另行提供兼容且已获授权的动态库。
 
-完整安装包目前仅供内部使用，尚未通过 PyPI 或公开 Release 分发。源码许可证不涵盖 Light/Heavy 动态库，其对外分发条款尚未确定。
+含引擎的完整 Python wheel 目前仅供内部使用，尚未通过 PyPI 或公开 Release 分发。安装后，Python 接口会自动识别包内的动态库，并在调用 Light/Heavy 时加载。动态库单独授权，不适用本仓库的源码许可证；对外使用或分发需要另行授权。
 
-首次源码发布不附带 Light/Heavy 引擎；从本仓库构建的 wheel 也明确排除该引擎。
-无引擎时，Rust 独立路径算法、CLI 的 `--method greedy` 和张量数值收缩可用；
-Python 可执行已有收缩路径、切片和网络化简，但 `arctn_path`、`arctn_schedule`、
-`arctn_plan` 的 Light/Heavy 规划需要另行提供引擎。下面的矩阵乘法示例不需要引擎。
-
-本轮发布检查以 Windows x64、Rust 1.97.1、CPython 3.13 为验证目标。
-Linux/macOS、其他 Python 版本及 MPI 仍需对应环境的 CI 验证；版本下限是声明的兼容范围，
-不代表已在所有组合上完成测试。MPI 为实验性可选功能，保留源码但不在首发支持范围内；
-普通单机 Rust/Python 功能不需要 MPI。MPI 依赖的维护状态说明见 [MPI 文档](docs/mpi.md)。
+[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。MPI 仍为实验性可选功能，不在当前正式支持范围内；普通单机 Rust/Python 功能不需要 MPI。使用方式及依赖维护说明见 [MPI 文档](docs/mpi.md)。
 
 <a id="rust"></a>
 
@@ -44,8 +36,8 @@ Linux/macOS、其他 Python 版本及 MPI 仍需对应环境的 CI 验证；版�
 源码构建需要 Rust 1.82 或更新版本：
 
 ```sh
-git clone https://github.com/Quill-ArcLight/arctn-public.git
-cd arctn-public
+git clone https://github.com/Quill-ArcLight/ArcTN.git
+cd ArcTN
 cargo build --release
 cargo test
 cargo run --example contraction
@@ -73,7 +65,9 @@ let (path, stats) = random_greedy(&net, 16, 0)?;
 
 ### 安装
 
-安装完整 wheel 不需要 Rust。请选择与操作系统、CPU 架构和 Python 版本匹配的安装包，将下面的路径替换为实际文件路径：
+从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不附带 Light/Heavy 动态库。
+
+如果已获得含引擎的完整 wheel，可以直接安装，无需 Rust。请选择与操作系统、CPU 架构和 Python 版本匹配的安装包，将下面的路径替换为实际文件路径：
 
 ```sh
 python -m venv .venv
@@ -82,8 +76,6 @@ python -m pip install /path/to/arctn-...whl
 ```
 
 以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。不同系统、CPU 架构和 Python 版本使用不同 wheel，具体以提供的安装包为准。
-
-如果从本仓库源码安装，需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不附带 Light/Heavy 动态库。
 
 ### 执行已有收缩路径
 

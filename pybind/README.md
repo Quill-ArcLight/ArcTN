@@ -2,15 +2,16 @@
 
 Python 包提供收缩序优化、路径保存与加载、切片和数值收缩接口。
 
-首次源码发布请使用下文的“从源码安装”。该方式不附带闭源引擎，可以执行已有路径、
-切片和网络化简；Light/Heavy 路径规划仍需要单独许可的引擎。
-下文“完整 wheel”描述含引擎的内部安装包，不表示公开源码发行版包含它。
+从本仓库安装请使用[从源码安装](#source-installation)。该方式不附带 Light/Heavy 引擎，
+可以执行已有路径、切片和网络化简。Light/Heavy 收缩序优化需要单独提供的动态库，
+或包含该动态库的完整 wheel。
 
 <a id="complete-wheel-installation"></a>
 
 ## 安装完整 wheel
 
-请选择与操作系统、CPU 架构和 Python 版本匹配的完整 wheel，安装时不需要 Rust。
+以下步骤适用于已获得完整 wheel 的用户，安装时不需要 Rust。
+请选择与操作系统、CPU 架构和 Python 版本匹配的文件。
 目前跨平台构建使用 CPython 3.12 和 3.13；源码支持 Python 3.9 及以上版本，
 但这不表示每个 Python 版本都有对应的预编译 wheel。将下面的路径替换为实际的 wheel 文件路径：
 
@@ -27,8 +28,8 @@ Linux、macOS 和 Windows 的 wheel 不能跨平台使用；具体可安装的�
 导入 `arctn` 时会自动识别该动态库，调用 Light/Heavy 时加载，无需额外设置环境变量。
 `arctn_path`、`arctn_schedule`、`arctn_plan` 等高层接口的参数和返回类型保持一致。
 
-完整 wheel 目前仅供内部使用，尚未发布到 PyPI，也没有公开的二进制发行版。
-公司源码采用 Arclight 非商业源码可用许可证 1.0（禁止商用和闭源集成，非 OSI 开源许可）。Light/Heavy 动态库单独许可，其对外分发条款尚未确定。
+含引擎的完整 wheel 目前仅供内部使用，尚未通过 PyPI 或公开 Release 分发。
+源码和动态库分别授权，说明见[源码与 Light / Heavy](../README.md#source-and-availability)。
 
 NumPy 会作为依赖自动安装。如需与 Quimb 和 Cotengra 配合使用，请安装：
 
