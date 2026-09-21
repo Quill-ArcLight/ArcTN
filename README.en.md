@@ -27,7 +27,7 @@ This repository provides the source for standalone algorithms, network and path 
 
 **The Light and Heavy implementations are proprietary; this repository provides their calling interfaces.** Rust crates and Python wheels built from this repository do not include the engine. The standalone Rust algorithms, the CLI's `--method greedy`, and numerical tensor contraction work without it. Python users can execute existing contraction paths, slice networks, and simplify networks. Calling Light/Heavy through interfaces such as `arctn_path`, `arctn_schedule`, and `arctn_plan` requires a compatible, separately licensed shared library.
 
-[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) runs Rust and CPython 3.13 tests on Linux, macOS, and Windows, plus Open MPI multiprocess tests on Linux. MPI remains an optional experimental feature outside the current supported release scope. Standard single-machine Rust/Python functionality does not require MPI. See the [MPI documentation (Chinese)](docs/mpi.md) for usage and dependency maintenance details.
+[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) runs Rust and CPython 3.13 tests on Linux, macOS, and Windows, plus Open MPI multiprocess tests on Linux. MPI is an optional feature for parallel slice execution: `tnmpi` distributes slices across processes, contracts them along a saved path, and sums the results. Standard single-machine Rust/Python functionality does not require MPI. See the [MPI documentation (Chinese)](docs/mpi.md) for installation and runtime requirements.
 
 <a id="rust"></a>
 

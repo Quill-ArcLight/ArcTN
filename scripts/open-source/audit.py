@@ -168,7 +168,7 @@ def licenses():
 
 
 def mpi():
-    """Experimental MPI validation, separate from first-release support checks."""
+    """Check the optional MPI feature separately from the default build."""
     run("mpi-check", ["cargo", "check", "--locked", "--all-features", "--all-targets"],
         env={"CARGO_TARGET_DIR": str(OUT / "rust-build")})
 

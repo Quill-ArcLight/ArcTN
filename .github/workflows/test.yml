@@ -29,7 +29,7 @@ jobs:
       - run: cargo package --locked
 
   mpi:
-    # Experimental MPI coverage is retained but is outside first-release support.
+    # Optional MPI build and multiprocess tests on Linux.
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 20

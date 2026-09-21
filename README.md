@@ -27,7 +27,7 @@ ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和�
 
 **Light 和 Heavy 的实现闭源，本仓库保留调用接口。** 从本仓库源码构建的 Rust crate 和 Python wheel 不包含该引擎。Rust 独立算法、CLI 的 `--method greedy` 和张量数值收缩可直接使用；Python 可执行已有收缩路径、切片和网络化简。使用 `arctn_path`、`arctn_schedule`、`arctn_plan` 等接口调用 Light/Heavy，需要另行提供兼容且已获授权的动态库。
 
-[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。MPI 仍为实验性可选功能，不在当前正式支持范围内；普通单机 Rust/Python 功能不需要 MPI。使用方式及依赖维护说明见 [MPI 文档](docs/mpi.md)。
+[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。MPI 是可选的切片并行执行功能，通过 `tnmpi` 按已保存的收缩路径计算分配给各进程的切片，并汇总结果。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
 
 <a id="rust"></a>
 

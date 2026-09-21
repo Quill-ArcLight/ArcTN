@@ -2,7 +2,7 @@
   "accepted_on": "2026-09-14",
   "review_due": "2026-10-15",
   "owner": "liuxl",
-  "scope": "Source release; MPI remains experimental and outside first-release support.",
+  "scope": "Source release, including optional MPI dependencies.",
   "exceptions": [
     {
       "lockfile": "Cargo.lock",
