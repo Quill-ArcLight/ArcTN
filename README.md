@@ -1,44 +1,44 @@
 # ArcTN
 
-**简体中文** | [English](https://github.com/Quill-ArcLight/ArcTN/blob/main/README.en.md)
+**English** | [简体中文](https://github.com/Quill-ArcLight/ArcTN/blob/main/README.zh-CN.md)
 
-ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和数值收缩，并通过 Python 接口接入 Quimb、Cotengra 和 opt_einsum。既可向其他工具提供收缩路径，也可直接执行张量网络收缩。
+ArcTN is a tensor network library written in Rust for contraction order optimization, slicing, and numerical contraction. Its Python interface connects to Quimb, Cotengra, and opt_einsum. ArcTN can supply contraction paths to other tools or execute tensor network contractions directly.
 
-[中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
+[Documentation (Chinese)](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
 
 <a id="algorithms-and-execution"></a>
 
-## 主要功能
+## Features
 
-- 收缩序优化：贪心、随机贪心、子集动态规划、固定叶序动态规划和超图二分。
-- 收缩树优化：子树重构、模拟退火和并行回火（parallel tempering）。
-- 网络化简，以及从化简网络的收缩路径重建原网络的路径。
-- 固定收缩路径的切片，以及允许局部调整收缩路径的动态切片。
-- 实数和复数稠密张量的 CPU 收缩。
-- 收缩路径和切片信息的保存、路径编译与重复执行，以及路径缓存。
-- NumPy 和显式指定的外部数组后端；可选的 MPI 切片并行执行。
+- Contraction order optimization: greedy search, random-greedy search, subset dynamic programming, fixed-leaf-order dynamic programming, and hypergraph bisection.
+- Contraction tree optimization: subtree reconfiguration, simulated annealing, and parallel tempering.
+- Network simplification and reconstruction of an original-network path from a simplified-network path.
+- Slicing with a fixed contraction path, or dynamic slicing with local changes to the contraction path.
+- Dense real and complex tensor contraction on CPUs.
+- Saving contraction paths and slicing information, compiling paths for repeated execution, and path caching.
+- NumPy and explicitly selected external array backends; optional MPI execution of independent slices.
 
-网络结构由各输入张量的索引（index）、输出索引和相应维度定义；数值执行时另行提供对应的张量数组。量子电路到张量网络的转换由 Quimb 等前端完成，ArcTN 接收转换后的张量网络。
+A network is specified by the indices of each input tensor, the output indices, and the index dimensions. Numerical execution also requires the corresponding arrays. Frontends such as Quimb convert quantum circuits into tensor networks; ArcTN takes the resulting networks as input.
 
 <a id="source-and-availability"></a>
 
-## 源码与 Light / Heavy
+## Source code and Light / Heavy
 
-本仓库公开独立算法、网络与路径类型、切片、数值执行、Python 接口和命令行工具。公司有权授权的源码采用 **[Arclight 非商业源码可用许可证 1.0](LICENSE)**，禁止商用和闭源集成；这不是 OSI 标准开源许可。
+This repository provides the source for standalone algorithms, network and path types, slicing, numerical execution, Python bindings, and command-line tools. Code that Arclight has the right to license is distributed under the **[Arclight Noncommercial Source-Available License 1.0](LICENSE)**, which prohibits commercial use and closed-source integration. This is not an OSI-approved open-source license.
 
-**Light 和 Heavy 的实现闭源，本仓库提供调用接口。** 从本仓库源码构建的 Rust crate 和 Python wheel 不包含该引擎。没有引擎时，仍可使用 Rust 独立算法、CLI 的 `--method greedy` 和张量数值收缩；Python 可执行已有收缩路径及给定的切片方案，并进行网络化简。
+**The Light and Heavy implementations are proprietary; this repository provides their calling interfaces.** Rust crates and Python wheels built from this repository do not include the engine. The standalone Rust algorithms, the CLI's `--method greedy`, and numerical tensor contraction work without it. Python users can execute existing contraction paths with or without specified sliced indices, and simplify networks.
 
-通过 `arctn_path`、`arctn_schedule`、`arctn_plan` 等接口使用 Light/Heavy，需要安装包含引擎的完整 wheel，或单独配置兼容且已获授权的动态库。安装方法见 [Python 使用](#python)。
+To use Light/Heavy through interfaces such as `arctn_path`, `arctn_schedule`, and `arctn_plan`, install a complete wheel containing the engine or configure a compatible, separately licensed shared library. See [Python usage](#python) for installation instructions.
 
-[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。
+[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) runs Rust and CPython 3.13 tests on Linux, macOS, and Windows, plus Open MPI multiprocess tests on Linux.
 
-MPI 是可选的切片并行执行功能。`tnmpi` 将切片分配给各进程，按已保存的收缩路径执行计算，最后对各进程的结果求和。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
+MPI is an optional feature for parallel slice execution. `tnmpi` distributes slices across processes, contracts them along a saved path, and sums the results. Standard single-machine Rust/Python functionality does not require MPI. See the [MPI documentation (Chinese)](docs/mpi.md) for installation and runtime requirements.
 
 <a id="rust"></a>
 
-## Rust 使用
+## Rust usage
 
-源码构建需要 Rust 1.82 或更新版本：
+Building from source requires Rust 1.82 or later:
 
 ```sh
 git clone https://github.com/Quill-ArcLight/ArcTN.git
@@ -48,17 +48,17 @@ cargo test
 cargo run --example contraction
 ```
 
-`RAYON_NUM_THREADS` 设置默认 Rayon 线程池的线程数，应用也可以使用自己的 Rayon 线程池。Cargo 的 `mt` feature 启用独立的矩阵乘法线程池；与切片并行同时使用时，应控制总线程数，避免超过可用 CPU 核数。
+`RAYON_NUM_THREADS` sets the size of the default Rayon thread pool. Applications can also use their own Rayon pools. The Cargo `mt` feature enables a separate matrix multiplication thread pool. When combining it with parallel slice execution, limit the total number of threads to avoid oversubscribing the available CPU cores.
 
 <a id="python"></a>
 
-## Python 使用
+## Python usage
 
 <a id="python-installation"></a>
 
-### 安装
+### Installation
 
-安装包含 Light/Heavy 引擎的 ArcTN 1.0.0 完整 wheel，无需 Rust。先获取与操作系统、CPU 架构和 Python 版本匹配的安装包，在该 wheel 文件所在的目录打开终端，然后运行：
+A complete ArcTN 1.0.0 wheel containing the Light/Heavy engine can be installed without Rust. Obtain a wheel matching your operating system, CPU architecture, and Python version, open a terminal in the directory containing that file, and run:
 
 ```sh
 python -m venv .venv
@@ -66,19 +66,19 @@ source .venv/bin/activate
 python -m pip install --find-links=. arctn==1.0.0
 ```
 
-`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。NumPy 等依赖会自动安装。
+`arctn==1.0.0` selects the version to install. `--find-links=.` also searches the current directory for compatible wheels, so you do not need to enter the filename. Dependencies such as NumPy are installed automatically.
 
-以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。具体支持的组合以发布的安装包为准。
+The activation command above is for macOS and Linux. In Windows PowerShell, use `.venv\Scripts\Activate.ps1`. Supported combinations depend on the released wheels.
 
-从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不包含 Light/Heavy 动态库；调用 Light/Heavy 时需要[单独配置动态库](#engine-library)。
+Building the Python package from this repository requires Python 3.9 or later and Rust 1.83 or later. Follow the [source installation instructions (Chinese)](pybind/README.md#source-installation). A source installation does not include the Light/Heavy shared library; [configure it separately](#engine-library) to use Light/Heavy.
 
 <a id="light-and-heavy-interface"></a>
 
-### 调用 Light / Heavy
+### Call Light / Heavy
 
-先按[安装步骤](#python-installation)安装包含 Light/Heavy 引擎的完整 wheel，再在同一个 Python 环境中运行下面的代码。使用完整 wheel 不需要克隆源码或安装 Rust，也不需要手动加载动态库。
+Follow the [installation instructions](#python-installation) to install a complete wheel containing the Light/Heavy engine, then run the code below in the same Python environment. With a complete wheel, you do not need to clone the source, install Rust, or load the shared library manually.
 
-**导入的是 `arctn_path` 函数，Light 和 Heavy 由 `preset` 参数选择，不是两个需要单独导入的 Python 模块。** 导入时，Python 接口会自动识别安装包中的引擎动态库；第一次调用搜索函数时再加载并运行它。下面的例子使用 Light：
+**Import the `arctn_path` function and select Light or Heavy with `preset`; they are not separate Python modules to import.** On import, the Python interface detects the bundled engine library. The library is loaded and used when you first call a search function. This example uses Light:
 
 ```python
 from arctn import arctn_path
@@ -95,15 +95,15 @@ path = arctn_path(
 print(path)
 ```
 
-**使用 Heavy 时，只需把 `preset="light"` 改成 `preset="heavy"`，不需要重新安装或更换导入语句。** 未指定 `preset` 时默认使用 Heavy。
+**To use Heavy, change only `preset="light"` to `preset="heavy"`. No reinstallation or change to the import is needed.** If `preset` is omitted, Heavy is used.
 
-`inputs` 按张量顺序列出各自的索引，`output` 指定结果保留的索引及顺序，`size_dict` 给出各索引的维度。这个例子表示三个矩阵的乘积，输入形状分别为 `(2, 3)`、`(3, 4)` 和 `(4, 2)`，输出形状为 `(2, 2)`。
+`inputs` lists the indices of each tensor in input order, `output` gives the indices to retain and their order, and `size_dict` gives each index's dimension. This example represents a product of three matrices with shapes `(2, 3)`, `(3, 4)`, and `(4, 2)`, producing a `(2, 2)` result.
 
-`arctn_path` 只搜索收缩序，不执行数值收缩，因此不需要矩阵中的数值。返回值是一组二元组，表示每一步收缩哪两个张量；默认使用 opt_einsum 的 linear path 格式，设置 `use_ssa=True` 可返回 SSA path。
+`arctn_path` searches for a contraction order without performing the numerical contraction, so it does not need array values. It returns a list of pairs identifying the tensors to contract at each step. The default is opt_einsum's linear path format; set `use_ssa=True` to return an SSA path.
 
-`seed` 指定搜索使用的随机种子。两种模式使用相同的优化目标参数，默认是 `flops_weight=1, read_write_weight=64`；设置 `read_write_weight=0` 可仅优化 FLOPs。
+`seed` sets the random seed for the search. Both modes use the same objective parameters, with defaults `flops_weight=1, read_write_weight=64`; set `read_write_weight=0` to optimize FLOPs alone.
 
-如果还需要路径指标，改用 `arctn_schedule`。沿用上面的网络定义：
+To obtain path metrics as well, use `arctn_schedule` instead. Reusing the network definition above:
 
 ```python
 from arctn import arctn_schedule
@@ -114,23 +114,23 @@ print("log10 FLOPs:", result["log10_flops"])
 print("log2 largest intermediate:", result["log2_max_size"])
 ```
 
-`arctn_schedule` 返回字典，包含最终路径、优化目标的权重、路径指标、可选的切片结果和收缩序优化耗时。上面的 `log10_flops` 是 FLOPs 的以 10 为底的对数，`log2_max_size` 是最大中间张量元素数的以 2 为底的对数。
+`arctn_schedule` returns a dictionary containing the final path, objective weights, path metrics, optional slicing results, and contraction order optimization time. Here, `log10_flops` is the base-10 logarithm of the FLOP count, and `log2_max_size` is the base-2 logarithm of the number of elements in the largest intermediate tensor.
 
-按需要选择调用入口，不需要依次调用：
+Choose the function for the result you need; these are not sequential steps:
 
-| 需求 | 从 `arctn` 导入 | 返回值 |
+| Task | Import from `arctn` | Return value |
 | --- | --- | --- |
-| 只搜索收缩序 | `arctn_path` | 一条收缩路径 |
-| 搜索并查看路径指标，或生成切片方案 | `arctn_schedule` | 包含路径和指标的字典 |
-| 搜索后直接执行收缩 | `arctn_contract` | 结果数组；设置 `return_info=True` 时返回 `(result, info)` |
+| Search for a contraction order | `arctn_path` | A contraction path |
+| Search and obtain path metrics, or select sliced indices | `arctn_schedule` | A dictionary containing the path and metrics |
+| Search and execute the contraction | `arctn_contract` | The result array, or `(result, info)` with `return_info=True` |
 
-这三个入口都通过 `preset` 选择 Light 或 Heavy。`arctn_contract` 还需要按 `inputs` 的顺序传入 `arrays`，默认使用 Rust CPU 执行器。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md#interfaces)。
+All three functions select Light or Heavy through `preset`. `arctn_contract` also requires `arrays` in the same order as `inputs` and uses the Rust CPU executor by default. See the [Python interface guide (Chinese)](pybind/README.md#interfaces) for other interfaces and Quimb usage.
 
-`arctn_schedule` 和 `arctn_contract` 接受 `target_size`，限制每个切片中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 的单位是秒，由搜索过程检查，不会由操作系统强制终止进程。
+`arctn_schedule` and `arctn_contract` accept `target_size`, which limits the number of elements in any single intermediate tensor produced within each slice, not the process's total memory use. `max_time` is measured in seconds and checked by the search itself; it does not cause the operating system to terminate the process.
 
-### 执行已有收缩路径
+### Execute an existing contraction path
 
-如果已经有收缩路径，可直接编译并执行，不需要调用 Light/Heavy。以下是一个独立的矩阵乘法示例：
+If you already have a contraction path, you can compile and execute it without calling Light/Heavy. This is a separate matrix multiplication example:
 
 ```python
 import numpy as np
@@ -146,20 +146,20 @@ np.testing.assert_allclose(compiled([a, b]), a @ b)
 
 <a id="engine-library"></a>
 
-### 单独配置 Light/Heavy 动态库
+### Configure a separate Light/Heavy shared library
 
-从 Rust 调用 Light/Heavy、使用 Python 源码安装，或需要指定其他兼容动态库时，在首次调用前设置动态库的绝对路径：
+To call Light/Heavy from Rust or a Python source installation, or to select another compatible shared library, set the library's absolute path before the first call:
 
 ```sh
 export ARCTN_ENGINE_LIBRARY=/absolute/path/to/libarctn_engine.so
 ```
 
-macOS 使用对应的 `.dylib`；Windows 使用 `.dll`，PowerShell 的设置方式见 [动态库接口说明](docs/engine-interface.md)。显式设置的 `ARCTN_ENGINE_LIBRARY` 优先于 Python 包中附带的动态库。
+Use the corresponding `.dylib` on macOS or `.dll` on Windows. PowerShell instructions are in the [engine interface documentation](docs/engine-interface.md). An explicit `ARCTN_ENGINE_LIBRARY` setting takes precedence over the shared library bundled with the Python package.
 
-动态库必须与操作系统、CPU 架构和 [ABI 版本](docs/engine-interface.md#c-abi-version-1) 匹配，并来自可信来源。没有可用动态库时，Light/Heavy 调用会报告安装错误，不影响独立算法或已有路径的执行。
+The shared library must match the operating system, CPU architecture, and [ABI version](docs/engine-interface.md#c-abi-version-1), and must come from a trusted source. If no usable library is available, Light/Heavy calls report an installation error. Standalone algorithms and execution of existing paths remain available.
 
 <a id="license"></a>
 
-## 许可证
+## License
 
-公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖保留各自许可证。第三方声明及早期开发版本中保留的许可文本说明，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库单独许可，本许可证不授权其分发或使用。
+Company-owned code is covered by the [Arclight Noncommercial Source-Available License 1.0](LICENSE). Third-party dependencies retain their own licenses. See the [third-party and historical licensing notices](THIRD_PARTY_NOTICES.md) for dependency notices and an explanation of the license texts retained from earlier development revisions. The Light/Heavy shared library is licensed separately. This source license does not grant permission to use or distribute it.
