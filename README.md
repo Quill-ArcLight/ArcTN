@@ -4,7 +4,7 @@
 
 ArcTN is a tensor network library written in Rust for contraction order optimization, slicing, and numerical contraction. Its Python interface connects to Quimb, Cotengra, and opt_einsum. ArcTN can supply contraction paths to other tools or execute tensor network contractions directly.
 
-[Documentation (Chinese)](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
+[Documentation](https://quantumquill.arclightquantum.com/en/docs/arctn/index.html)
 
 <a id="algorithms-and-execution"></a>
 
