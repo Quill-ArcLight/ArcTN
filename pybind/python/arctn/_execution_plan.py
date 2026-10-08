@@ -61,6 +61,7 @@ _PLANNING_KEYS = (
     "flops_weight",
     "read_write_weight",
     "slicing_mode",
+    "allow_output_slicing",
 )
 
 
@@ -486,7 +487,11 @@ class ArcTNExecutionPlan:
         )
 
     def execute(self, arrays, *, backend="native", return_info=False):
-        """Execute this exact path and slice set without running the planner."""
+        """Execute this path, sum internal slices, and assemble output blocks.
+
+        The full output is returned in the plan's output order. A per-slice
+        size target does not constrain the complete output allocation.
+        """
         backend = _validate_execution_backend(backend)
         try:
             arrays = tuple(arrays)
@@ -529,7 +534,7 @@ class ArcTNExecutionPlan:
             implementation = "arctn.contract_sliced"
         else:
             compile_started = time.perf_counter()
-            expression, index_plans, slice_dimensions = (
+            expression, index_plans, slice_dimensions, output_slices = (
                 _compile_external_sliced_expression(
                     self._inputs,
                     self._output,
@@ -547,6 +552,7 @@ class ArcTNExecutionPlan:
                 index_plans,
                 slice_dimensions,
                 backend=backend,
+                output_slices=output_slices,
             )
             dispatch_wall_s = time.perf_counter() - execution_started
             implementation = "arctn.sliced_contract_expression"
@@ -597,8 +603,14 @@ def arctn_plan(
     flops_weight=1.0,
     read_write_weight=64.0,
     rate_enabled=True,
+    allow_output_slicing=False,
 ):
-    """Plan once and return an immutable backend-neutral execution plan."""
+    """Plan once and return an immutable backend-neutral execution plan.
+
+    Slicing considers only internal indices by default. Set
+    ``allow_output_slicing=True`` to include output indices; execution then
+    assembles the full output from the resulting blocks.
+    """
     preset = _validate_auto_preset(preset)
     max_time = _validate_max_time(max_time)
     flops_weight, read_write_weight = _validate_planner_weights(
@@ -607,6 +619,7 @@ def arctn_plan(
     target_size = _validate_target_size(target_size)
     slicing_mode = _validate_slicing_mode(slicing_mode, target_size)
     rate_enabled = _validate_bool(rate_enabled, "rate_enabled")
+    allow_output_slicing = _validate_bool(allow_output_slicing, "allow_output_slicing")
     report = arctn_schedule(
         inputs,
         output,
@@ -620,6 +633,7 @@ def arctn_plan(
         flops_weight=flops_weight,
         read_write_weight=read_write_weight,
         rate_enabled=rate_enabled,
+        allow_output_slicing=allow_output_slicing,
     )
     return ArcTNExecutionPlan.from_schedule(
         report,

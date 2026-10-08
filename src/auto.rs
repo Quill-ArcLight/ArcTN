@@ -78,7 +78,7 @@ pub struct AutoResult {
     pub stats: PathStats,
     /// Exact sliced legs and the metrics of the corresponding sliced path.
     pub sliced: Option<SliceResult>,
-    /// Planning wall time reported by the engine, in seconds.
+    /// Engine planning time plus any public output-slicing work, in seconds.
     pub wall_s: f64,
 }
 
@@ -217,6 +217,11 @@ fn validate_response(
             if target_size.is_none() {
                 return Err("ArcTN engine returned slicing without a target_size request".into());
             }
+            if legs.iter().any(|leg| net.output.contains(leg)) {
+                return Err(
+                    "ArcTN engine returned output-index slicing without an explicit request".into(),
+                );
+            }
             validate_slice_legs(net, &legs)
                 .map_err(|error| format!("ArcTN engine returned invalid sliced legs: {error}"))?;
             let mut sliced_net = net.clone();
@@ -305,6 +310,97 @@ pub fn optimize(
         .map_err(|error| format!("cannot serialize ArcTN engine request: {error}"))?;
     let response = engine()?.run(&request)?;
     validate_response(net, response, target_size)
+}
+
+/// Run a preset with optional output-index slicing.
+///
+/// With output slicing enabled and a size target, the engine supplies an
+/// unsliced order and the public slicing implementation applies the target.
+/// This preserves the version 1 engine ABI and works with existing engines.
+/// Execution assembles a complete output, whose storage is not bounded by the
+/// per-slice size target. Without the option, engine behavior is unchanged.
+#[allow(clippy::too_many_arguments)]
+pub fn optimize_with_output_slicing(
+    net: &TensorNetwork,
+    preset: AutoPreset,
+    seed: u64,
+    max_time: Option<f64>,
+    objective: PlannerObjective,
+    rate_enabled: bool,
+    target_size: Option<usize>,
+    mode: SlicingMode,
+    allow_output_slicing: bool,
+) -> Result<AutoResult, String> {
+    if !allow_output_slicing || target_size.is_none() {
+        return optimize(
+            net,
+            preset,
+            seed,
+            max_time,
+            objective,
+            rate_enabled,
+            target_size,
+            mode,
+        );
+    }
+    let target_size = target_size.expect("the target was checked above");
+    let target = crate::slice::SliceTarget::from_elements(target_size)
+        .ok_or_else(|| "target_size must be greater than zero".to_owned())?;
+    let result = optimize(
+        net,
+        preset,
+        seed,
+        max_time,
+        objective,
+        rate_enabled,
+        None,
+        SlicingMode::Fixed,
+    )?;
+    slice_output_order(net, result, target, mode, objective)
+}
+
+fn slice_output_order(
+    net: &TensorNetwork,
+    mut result: AutoResult,
+    target: crate::slice::SliceTarget,
+    mode: SlicingMode,
+    objective: PlannerObjective,
+) -> Result<AutoResult, String> {
+    let started = std::time::Instant::now();
+    let (path, sliced) = match mode {
+        SlicingMode::Fixed => crate::slice::find_slices_until_for_target_with_output_slicing(
+            net,
+            &result.path,
+            target,
+            None,
+            true,
+        )
+        .map(|sliced| (result.path.clone(), sliced)),
+        SlicingMode::Dynamic => {
+            crate::slice::slice_and_reconf_until_for_target_with_objective_and_output_slicing(
+                net,
+                &result.path,
+                target,
+                3,
+                8,
+                None,
+                objective,
+                true,
+            )
+        }
+    }
+    .ok_or_else(|| "no valid slice plan meets target_size".to_owned())?;
+    let crate::slice::SliceTarget::Elements(limit) = target else {
+        return Err("output slicing requires an exact element target".into());
+    };
+    if !slice_result_fits_target_size(net, &path, &sliced, limit.get())? {
+        return Err("output-index slice plan failed exact target validation".into());
+    }
+    result.stats = simulate_path(net, &path)?;
+    result.path = path;
+    result.sliced = Some(sliced);
+    result.wall_s += started.elapsed().as_secs_f64();
+    Ok(result)
 }
 
 /// Run Light or Heavy with the default planner objective.
@@ -427,6 +523,63 @@ pub fn auto_path_preset_to_size_with_mode_and_objective(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn output_slicing_adapter_preserves_output_and_meets_target() {
+        for unary in [false, true] {
+            let net = TensorNetwork {
+                name: "output-blocks".into(),
+                inputs: if unary {
+                    vec![vec![0, 1, 2]]
+                } else {
+                    vec![vec![0, 1], vec![1, 2]]
+                },
+                output: vec![2, 0],
+                size_dict: [(0, 2), (1, 3), (2, 4)].into_iter().collect(),
+            };
+            let path = if unary { vec![] } else { vec![(0, 1)] };
+            let original = net.clone();
+            for mode in [SlicingMode::Fixed, SlicingMode::Dynamic] {
+                let unsliced = AutoResult {
+                    stats: simulate_path(&net, &path).unwrap(),
+                    path: path.clone(),
+                    sliced: None,
+                    wall_s: 0.25,
+                };
+                let result = slice_output_order(
+                    &net,
+                    unsliced,
+                    crate::slice::SliceTarget::from_elements(2).unwrap(),
+                    mode,
+                    PlannerObjective::FIXED,
+                )
+                .unwrap();
+                let sliced = result.sliced.as_ref().unwrap();
+                assert!(sliced.legs.iter().any(|leg| net.output.contains(leg)));
+                assert!(slice_result_fits_target_size(&net, &result.path, sliced, 2).unwrap());
+                assert!(result.wall_s >= 0.25);
+                if mode == SlicingMode::Fixed {
+                    assert_eq!(result.path, path);
+                }
+                assert_eq!(net.output, original.output);
+                assert_eq!(net.inputs, original.inputs);
+                assert_eq!(net.size_dict, original.size_dict);
+            }
+        }
+    }
+
+    #[test]
+    fn engine_cannot_enable_output_slicing_implicitly() {
+        let net = TensorNetwork {
+            name: "open-output".into(),
+            inputs: vec![vec![0, 1], vec![1, 2]],
+            output: vec![0, 2],
+            size_dict: [(0, 2), (1, 3), (2, 2)].into_iter().collect(),
+        };
+        let response = decode_response(r#"{"path":[[0,1]],"sliced_legs":[0],"wall_s":0}"#).unwrap();
+        let error = validate_response(&net, response, Some(2)).unwrap_err();
+        assert!(error.contains("output-index slicing"));
+    }
 
     fn network() -> TensorNetwork {
         TensorNetwork {

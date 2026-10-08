@@ -32,7 +32,7 @@ To use Light/Heavy through interfaces such as `arctn_path`, `arctn_schedule`, an
 
 [CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) runs Rust and CPython 3.13 tests on Linux, macOS, and Windows, plus Open MPI multiprocess tests on Linux.
 
-MPI is an optional feature for parallel slice execution. `tnmpi` distributes slices across processes, contracts them along a saved path, and sums the results. Standard single-machine Rust/Python functionality does not require MPI. See the [MPI documentation (Chinese)](docs/mpi.md) for installation and runtime requirements.
+MPI is an optional feature for parallel slice execution. `tnmpi` supports internal-index slicing: it distributes slices across processes, contracts them along a saved path, and sums the results. Plans that slice output indices require single-process execution. Standard single-machine Rust/Python functionality does not require MPI. See the [MPI documentation (Chinese)](docs/mpi.md) for installation and runtime requirements.
 
 <a id="rust"></a>
 
@@ -138,6 +138,8 @@ Choose the function for the result you need; these are not sequential steps:
 All three functions select Light or Heavy through `preset`. `arctn_contract` also requires `arrays` in the same order as `inputs` and uses the Rust CPU executor by default. See the [Python interface guide (Chinese)](pybind/README.md#interfaces) for other interfaces and Quimb usage.
 
 `arctn_schedule` and `arctn_contract` accept `target_size`, which limits the number of elements in any single intermediate tensor produced within each slice, not the process's total memory use. `max_time` is measured in seconds and checked by the search itself; it does not cause the operating system to terminate the process.
+
+Slicing defaults to `allow_output_slicing=False`, so only internal indices are selected. Set `allow_output_slicing=True` with a size target to make output indices eligible as well. During execution, internal slices are summed within each output block, and the blocks are assembled in the declared output-axis order. The complete output still requires its full storage, even when its size exceeds `target_size`. This option is also available in `arctn_plan`, `arctn_tree`, and `ArcTNOptimizer`.
 
 ### Execute an existing contraction path
 

@@ -593,15 +593,28 @@ fn run<T: OracleScalar>(
         None => make_tensors::<T>(net, a.seed),
     };
 
-    // Outer concurrency is bounded by both chunk count and the Rayon pool size.
-    // Report it because each active slice clones the input tensors.
-    let out_numel: usize = net
+    // Output blocks execute sequentially. Only internal slices within a block
+    // share the Rayon pool; their chunk budget uses that block's output size.
+    net.output
+        .iter()
+        .try_fold(1usize, |total, &leg| total.checked_mul(net.dim(leg)))
+        .unwrap_or_else(|| {
+            eprintln!("完整输出元素数溢出 usize，拒绝执行");
+            std::process::exit(3);
+        });
+    // These products are subsets of the checked slice/output products.
+    let internal_slices = sliced
+        .iter()
+        .filter(|leg| !net.output.contains(leg))
+        .map(|&leg| net.dim(leg))
+        .product::<usize>();
+    let block_numel = net
         .output
         .iter()
-        .map(|&l| net.dim(l))
-        .product::<usize>()
-        .max(1);
-    let n_chunks = arctn::slice::slice_parallel_chunks(n_slices, out_numel);
+        .filter(|leg| !sliced.contains(leg))
+        .map(|&leg| net.dim(leg))
+        .product::<usize>();
+    let n_chunks = arctn::slice::slice_parallel_chunks(internal_slices, block_numel);
     let slice_par = n_chunks.min(rayon::current_num_threads());
     set_matmul_threads(n_chunks);
 

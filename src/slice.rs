@@ -2,7 +2,8 @@
 //!
 //! Slicing fixes selected legs in explicit loops to reduce the peak memory of
 //! each contraction. [`find_slices`] selects legs, [`SliceResult`] stores the
-//! slicing plan, and [`contract_network_sliced`] contracts and sums the slices.
+//! slicing plan, and [`contract_network_sliced`] contracts the slices, sums
+//! internal-index slices, and assembles output-index blocks.
 //!
 //! A slicing plan must remain paired with the path that produced it.
 //! `crate::paths::budgeted` and `crate::paths::greedy_path_with_slicing` can
@@ -129,8 +130,12 @@ pub fn slice_result_fits_target_size(
 }
 
 pub(crate) fn slice_leg_is_executable(net: &TensorNetwork, leg: LegId) -> bool {
+    slice_leg_is_allowed(net, leg, false)
+}
+
+fn slice_leg_is_allowed(net: &TensorNetwork, leg: LegId, allow_output_slicing: bool) -> bool {
     net.size_dict.get(&leg).is_some_and(|&dim| dim > 0)
-        && !net.output.contains(&leg)
+        && (allow_output_slicing || !net.output.contains(&leg))
         && net.inputs.iter().any(|legs| legs.contains(&leg))
         && !net
             .inputs
@@ -151,9 +156,6 @@ pub fn validate_slice_legs(net: &TensorNetwork, sliced: &[LegId]) -> Result<(), 
             .ok_or_else(|| format!("切片腿 {leg} 不在 size_dict 中"))?;
         if dim == 0 {
             return Err(format!("切片腿 {leg} 的维度为 0"));
-        }
-        if net.output.contains(&leg) {
-            return Err(format!("切片腿 {leg} 在 output 中"));
         }
         if !net.inputs.iter().any(|legs| legs.contains(&leg)) {
             return Err(format!("切片腿 {leg} 未被任何输入张量持有"));
@@ -217,25 +219,7 @@ pub(crate) fn find_slices_for_target(
     path: &SsaPath,
     target: SliceTarget,
 ) -> Option<SliceResult> {
-    let mut sliced: Vec<LegId> = Vec::new();
-    loop {
-        let cur = with_dims_one(net, &sliced);
-        let (stats, step_legs) = simulate_path_full(&cur, path).ok()?;
-        if target.path_is_feasible(&cur, &stats, &step_legs) {
-            let log2_n: f64 = sliced.iter().map(|&l| net.log2_dim(l)).sum();
-            let log10_total = stats.log10_flops + log2_n * std::f64::consts::LOG10_2;
-            return Some(SliceResult {
-                legs: sliced,
-                log2_n_slices: log2_n,
-                per_slice: stats,
-                log10_flops_total: log10_total,
-            });
-        }
-        // Use the same over-target-intermediate score as `slice_temper`.
-        let best = pick_slice_leg(net, &cur, &step_legs, target)?;
-        sliced.push(best);
-        sliced.sort_unstable();
-    }
+    find_slices_until_for_target_with_output_slicing(net, path, target, None, false)
 }
 
 /// Deadline-aware [`find_slices`].
@@ -262,9 +246,18 @@ pub(crate) fn find_slices_until_for_target(
     target: SliceTarget,
     deadline: Option<std::time::Instant>,
 ) -> Option<SliceResult> {
-    if deadline.is_none() {
-        return find_slices_for_target(net, path, target);
-    }
+    find_slices_until_for_target_with_output_slicing(net, path, target, deadline, false)
+}
+
+/// Opt-in output-index slicing for the preset planner. The default entry points
+/// continue to select only internal indices.
+pub(crate) fn find_slices_until_for_target_with_output_slicing(
+    net: &TensorNetwork,
+    path: &SsaPath,
+    target: SliceTarget,
+    deadline: Option<std::time::Instant>,
+    allow_output_slicing: bool,
+) -> Option<SliceResult> {
     let mut sliced: Vec<LegId> = Vec::new();
     loop {
         if deadline_reached(deadline) {
@@ -282,7 +275,13 @@ pub(crate) fn find_slices_until_for_target(
                 log10_flops_total: log10_total,
             });
         }
-        let best = pick_slice_leg(net, &cur, &step_legs, target)?;
+        let best = pick_slice_leg_with_output_slicing(
+            net,
+            &cur,
+            &step_legs,
+            target,
+            allow_output_slicing,
+        )?;
         sliced.push(best);
         sliced.sort_unstable();
     }
@@ -423,6 +422,29 @@ pub(crate) fn slice_and_reconf_until_for_target_with_objective(
     deadline: Option<std::time::Instant>,
     objective: PlannerObjective,
 ) -> Option<(SsaPath, SliceResult)> {
+    slice_and_reconf_until_for_target_with_objective_and_output_slicing(
+        net,
+        path,
+        target,
+        rounds,
+        subtree_size,
+        deadline,
+        objective,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn slice_and_reconf_until_for_target_with_objective_and_output_slicing(
+    net: &TensorNetwork,
+    path: &SsaPath,
+    target: SliceTarget,
+    rounds: usize,
+    subtree_size: usize,
+    deadline: Option<std::time::Instant>,
+    objective: PlannerObjective,
+    allow_output_slicing: bool,
+) -> Option<(SsaPath, SliceResult)> {
     slice_and_reconf_until_with_finder(
         net,
         path,
@@ -430,7 +452,15 @@ pub(crate) fn slice_and_reconf_until_for_target_with_objective(
         rounds,
         subtree_size,
         deadline,
-        find_slices_until_for_target,
+        |net, path, target, deadline| {
+            find_slices_until_for_target_with_output_slicing(
+                net,
+                path,
+                target,
+                deadline,
+                allow_output_slicing,
+            )
+        },
         objective,
     )
 }
@@ -521,14 +551,26 @@ fn pick_slice_leg(
     step_legs: &[Vec<LegId>],
     target: SliceTarget,
 ) -> Option<LegId> {
+    pick_slice_leg_with_output_slicing(net, cur, step_legs, target, false)
+}
+
+fn pick_slice_leg_with_output_slicing(
+    net: &TensorNetwork,
+    cur: &TensorNetwork,
+    step_legs: &[Vec<LegId>],
+    target: SliceTarget,
+    allow_output_slicing: bool,
+) -> Option<LegId> {
     let mut score: HashMap<LegId, (usize, f64)> = HashMap::new();
-    for legs in step_legs {
+    // A unary contraction has no SSA steps, but still produces an output root.
+    let unary_output = (allow_output_slicing && net.n_tensors() == 1).then_some(&cur.output);
+    for legs in step_legs.iter().chain(unary_output) {
         if target.legs_are_feasible(cur, legs) {
             continue;
         }
         for &l in legs {
             let d = cur.log2_dim(l);
-            if d <= 0.0 || !slice_leg_is_executable(net, l) {
+            if d <= 0.0 || !slice_leg_is_allowed(net, l, allow_output_slicing) {
                 continue;
             }
             let e = score.entry(l).or_insert((0, d));
@@ -889,12 +931,11 @@ const SLICE_PARTIAL_BUDGET: usize = 1 << 22;
 /// - unique;
 /// - present in `size_dict` with nonzero dimension;
 /// - present in at least one input tensor;
-/// - absent from the output;
 /// - present at most once in each input tensor.
 ///
 /// The final constraint excludes trace semantics that axis selection cannot
-/// represent. This public validator lets ranged `tnmpi` execution enforce the
-/// same contract as the single-process entry point.
+/// represent. Executors that only sum slices must additionally reject output
+/// indices; the single-process executor assembles their disjoint output blocks.
 pub fn validate_sliced_contraction_inputs<T: Scalar>(
     net: &TensorNetwork,
     tensors: &[DenseTensor<T>],
@@ -904,15 +945,18 @@ pub fn validate_sliced_contraction_inputs<T: Scalar>(
     validate_slice_legs(net, sliced)
 }
 
-/// Contract every assignment of the sliced legs and sum the results.
+/// Contract every assignment of the sliced legs, summing internal-index slices
+/// and assembling output-index slices in the original output-axis order.
 ///
-/// Slice numbers are partitioned into contiguous chunks. Rayon processes the
-/// chunks in parallel, each chunk accumulates in slice-number order, and the
-/// partial sums are merged in chunk order. Thread-count-independent chunking
-/// preserves the summation order across parallelism levels.
+/// Internal slice numbers are partitioned into contiguous chunks. Rayon
+/// processes the chunks in parallel, each chunk accumulates in slice-number
+/// order, and the partial sums are merged in chunk order. Thread-count-independent chunking
+/// preserves the summation order across parallelism levels. Output blocks are
+/// processed sequentially and written into one full output allocation.
 ///
 /// Parallel execution increases resident inputs, intermediates, and partial
-/// sums. `target_size` constrains one slice, not these concurrent replicas.
+/// sums. `target_size` constrains one slice, not these concurrent replicas or
+/// the fully assembled output returned by this function.
 pub fn contract_network_sliced<T: Scalar>(
     net: &TensorNetwork,
     tensors: &[DenseTensor<T>],
@@ -922,6 +966,9 @@ pub fn contract_network_sliced<T: Scalar>(
     validate_sliced_contraction_inputs(net, tensors, sliced)?;
     if sliced.is_empty() {
         return crate::contract::contract_network(net, tensors.to_vec(), path);
+    }
+    if sliced.iter().any(|leg| net.output.contains(leg)) {
+        return contract_output_blocks(net, tensors, path, sliced);
     }
 
     let sliced_pos: HashMap<LegId, usize> = sliced
@@ -1015,6 +1062,199 @@ pub fn contract_network_sliced<T: Scalar>(
         }
     }
     Ok(acc)
+}
+
+/// Output assignments occupy disjoint blocks; only the internal assignments
+/// belonging to the same block are summed. Keeping the old internal executor
+/// for each block preserves its deterministic chunking and accumulation order.
+fn contract_output_blocks<T: Scalar>(
+    net: &TensorNetwork,
+    tensors: &[DenseTensor<T>],
+    path: &SsaPath,
+    sliced: &[LegId],
+) -> Result<DenseTensor<T>, String> {
+    // Keep the same slice-count overflow contract for mixed slicing.
+    sliced.iter().try_fold(1usize, |total, &leg| {
+        total
+            .checked_mul(net.dim(leg))
+            .ok_or_else(|| "切片总数溢出 usize".to_string())
+    })?;
+    let outer: Vec<LegId> = net
+        .output
+        .iter()
+        .copied()
+        .filter(|leg| sliced.contains(leg))
+        .collect();
+    let outer_pos: HashMap<LegId, usize> = outer
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(position, leg)| (leg, position))
+        .collect();
+    let internal: Vec<LegId> = sliced
+        .iter()
+        .copied()
+        .filter(|leg| !outer_pos.contains_key(leg))
+        .collect();
+    let shape: Vec<usize> = net.output.iter().map(|&leg| net.dim(leg)).collect();
+    let numel = crate::tensor::checked_numel(&shape)?;
+    let bytes = numel
+        .checked_mul(std::mem::size_of::<T>())
+        .filter(|&bytes| bytes <= isize::MAX as usize)
+        .ok_or_else(|| "完整输出张量的字节数超过可分配容量".to_string())?;
+    let mut data = Vec::new();
+    data.try_reserve_exact(numel)
+        .map_err(|error| format!("无法分配完整输出张量（{bytes} 字节）：{error}"))?;
+    data.resize(numel, T::zero());
+    let mut result = DenseTensor {
+        shape: shape.clone(),
+        data,
+    };
+    let mut strides = vec![1usize; shape.len()];
+    for axis in (0..shape.len().saturating_sub(1)).rev() {
+        // checked_numel verified the full shape product above.
+        strides[axis] = strides[axis + 1] * shape[axis + 1];
+    }
+    let mut kept_axes = Vec::new();
+    let mut outer_strides = vec![0usize; outer.len()];
+    for (axis, &leg) in net.output.iter().enumerate() {
+        if let Some(&position) = outer_pos.get(&leg) {
+            outer_strides[position] = strides[axis];
+        } else {
+            kept_axes.push((shape[axis], strides[axis]));
+        }
+    }
+
+    let mut sub = net.clone();
+    for legs in &mut sub.inputs {
+        legs.retain(|leg| !outer_pos.contains_key(leg));
+    }
+    sub.output.retain(|leg| !outer_pos.contains_key(leg));
+    for &leg in &outer {
+        sub.size_dict.remove(&leg);
+    }
+    let dims: Vec<usize> = outer.iter().map(|&leg| net.dim(leg)).collect();
+    let n_blocks = crate::tensor::checked_numel(&dims)?;
+    let mut values = vec![0usize; outer.len()];
+    for block_number in 0..n_blocks {
+        decode_slice_index(block_number, &dims, n_blocks, &mut values);
+        let block_tensors: Vec<DenseTensor<T>> = net
+            .inputs
+            .iter()
+            .zip(tensors)
+            .map(|(legs, tensor)| {
+                let mut selected: Option<DenseTensor<T>> = None;
+                for axis in (0..legs.len()).rev() {
+                    if let Some(&position) = outer_pos.get(&legs[axis]) {
+                        let source = selected.as_ref().unwrap_or(tensor);
+                        selected = Some(source.select_axis(axis, values[position]));
+                    }
+                }
+                selected.unwrap_or_else(|| tensor.clone())
+            })
+            .collect();
+        let block = contract_network_sliced(&sub, &block_tensors, path, &internal)?;
+        let base: usize = values
+            .iter()
+            .zip(&outer_strides)
+            .map(|(&value, &stride)| value * stride)
+            .sum();
+        for (block_offset, value) in block.data.into_iter().enumerate() {
+            let mut remainder = block_offset;
+            let mut output_offset = base;
+            for &(dim, stride) in kept_axes.iter().rev() {
+                output_offset += (remainder % dim) * stride;
+                remainder /= dim;
+            }
+            result.data[output_offset] = value;
+        }
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+mod output_planning_tests {
+    use super::*;
+
+    #[test]
+    fn output_slicing_is_opt_in_and_handles_an_empty_ssa_path() {
+        let net = TensorNetwork {
+            name: "unary-output-target".into(),
+            inputs: vec![vec![0, 1]],
+            output: vec![1, 0],
+            size_dict: [(0, 2), (1, 3)].into_iter().collect(),
+        };
+        let path = vec![];
+        let target = SliceTarget::from_elements(2).unwrap();
+        assert!(find_slices_to_size(&net, &path, 2).is_none());
+        assert!(!slice_leg_is_executable(&net, 1));
+        let result =
+            find_slices_until_for_target_with_output_slicing(&net, &path, target, None, true)
+                .unwrap();
+        assert_eq!(result.legs, vec![1]);
+        assert!(slice_result_fits_target_size(&net, &path, &result, 2).unwrap());
+    }
+
+    #[test]
+    fn dynamic_output_slicing_retains_a_feasible_paired_result() {
+        let net = TensorNetwork {
+            name: "dynamic-output-target".into(),
+            inputs: vec![vec![0, 1], vec![1, 2]],
+            output: vec![2, 0],
+            size_dict: [(0, 2), (1, 3), (2, 2)].into_iter().collect(),
+        };
+        let path = vec![(0, 1)];
+        let target = SliceTarget::from_elements(2).unwrap();
+        assert!(slice_and_reconf_to_size(&net, &path, 2, 2, 2).is_none());
+        let (result_path, result) =
+            slice_and_reconf_until_for_target_with_objective_and_output_slicing(
+                &net,
+                &path,
+                target,
+                2,
+                2,
+                None,
+                PlannerObjective::FIXED,
+                true,
+            )
+            .unwrap();
+        assert!(result.legs.iter().any(|leg| net.output.contains(leg)));
+        assert!(slice_result_fits_target_size(&net, &result_path, &result, 2).unwrap());
+    }
+
+    #[test]
+    fn output_slicing_respects_deadline_and_trace_restriction() {
+        let net = TensorNetwork {
+            name: "trace-output-target".into(),
+            inputs: vec![vec![0, 0]],
+            output: vec![0],
+            size_dict: [(0, 2)].into_iter().collect(),
+        };
+        let path = vec![];
+        let target = SliceTarget::from_elements(1).unwrap();
+        assert!(
+            find_slices_until_for_target_with_output_slicing(&net, &path, target, None, true,)
+                .is_none()
+        );
+        let deadline = Some(std::time::Instant::now());
+        assert!(find_slices_until_for_target_with_output_slicing(
+            &net, &path, target, deadline, true,
+        )
+        .is_none());
+        assert!(
+            slice_and_reconf_until_for_target_with_objective_and_output_slicing(
+                &net,
+                &path,
+                target,
+                2,
+                2,
+                deadline,
+                PlannerObjective::FIXED,
+                true,
+            )
+            .is_none()
+        );
+    }
 }
 
 #[cfg(test)]

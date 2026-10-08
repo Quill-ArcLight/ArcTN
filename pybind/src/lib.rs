@@ -515,7 +515,8 @@ fn arctn_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = (inputs, output, size_dict, *, preset="heavy", seed=0,
                     use_ssa=false, target_size=None, slicing_mode="fixed", max_time=None,
-                    flops_weight=1.0, read_write_weight=64.0, rate_enabled=true))]
+                    flops_weight=1.0, read_write_weight=64.0, rate_enabled=true,
+                    allow_output_slicing=false))]
 #[allow(clippy::too_many_arguments)]
 fn optimize_auto_full<'py>(
     py: Python<'py>,
@@ -531,6 +532,7 @@ fn optimize_auto_full<'py>(
     flops_weight: f64,
     read_write_weight: f64,
     rate_enabled: bool,
+    allow_output_slicing: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let preset = pick_auto_preset(preset)?;
     let mode = pick_slicing_mode(slicing_mode)?;
@@ -540,7 +542,7 @@ fn optimize_auto_full<'py>(
     let net = build_net(inputs, output, size_dict)?;
     let result = py
         .detach(|| {
-            arctn::auto::optimize(
+            arctn::auto::optimize_with_output_slicing(
                 &net,
                 preset,
                 seed,
@@ -549,12 +551,14 @@ fn optimize_auto_full<'py>(
                 rate_enabled,
                 target.map(TargetRequest::exact_elements),
                 mode,
+                allow_output_slicing,
             )
         })
         .map_err(PyValueError::new_err)?;
     let d = PyDict::new(py);
     d.set_item("preset", preset.as_str())?;
     d.set_item("slicing_mode", slicing_mode)?;
+    d.set_item("allow_output_slicing", allow_output_slicing)?;
     d.set_item("wall_s", result.wall_s)?;
     d.set_item(
         "path",
@@ -654,9 +658,8 @@ fn simplify_stats<'py>(
 /// Execute a supplied path over the requested slice indices.
 ///
 /// An empty `sliced_legs` list uses the ordinary unsliced execution path.
-/// The outer parallelism is `min(number_of_slices, RAYON_NUM_THREADS)`, and
-/// each in-flight slice owns a copy of the input tensors. `target_size`
-/// constrains one intermediate tensor per slice, not total resident memory.
+/// Internal slice chunks run in the Rayon pool; output blocks are assembled
+/// sequentially. The size target does not bound the complete output allocation.
 fn contract_sliced_typed<'py, T>(
     py: Python<'py>,
     net: &TensorNetwork,
@@ -696,14 +699,6 @@ fn contract_sliced<'py>(
             "arrays 个数 {} 与 inputs 个数 {n} 不符",
             arrays.len()
         )));
-    }
-    // Reject sliced output indices before entering the execution engine.
-    for l in &sliced_legs {
-        if output.contains(l) {
-            return Err(PyValueError::new_err(format!(
-                "切片腿 {l} 出现在 output 中：开放腿不能被切（它要出现在结果里）"
-            )));
-        }
     }
     if path.is_some() && ssa_path.is_some() {
         return Err(PyValueError::new_err(

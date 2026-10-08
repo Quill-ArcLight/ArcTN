@@ -207,6 +207,11 @@ fn checked_product(dims: impl IntoIterator<Item = usize>) -> Result<usize, Strin
 
 fn sliced_network(net: &TensorNetwork, sliced: &[LegId]) -> Result<TensorNetwork, String> {
     arctn::slice::validate_slice_legs(net, sliced)?;
+    // MPI combines rank-local tensors by elementwise reduction. Output blocks
+    // require a different collective and remain a single-process capability.
+    if sliced.iter().any(|leg| net.output.contains(leg)) {
+        return Err("tnmpi supports internal-index slicing only; output-index slicing requires single-process execution".into());
+    }
     let mut sub = net.clone();
     for &leg in sliced {
         for indices in &mut sub.inputs {
@@ -490,6 +495,14 @@ mod tests {
             output: vec![0, 2],
             size_dict: [(0, 2), (1, 2), (2, 2)].into_iter().collect(),
         }
+    }
+
+    #[test]
+    fn mpi_rejects_output_slices_before_reduction() {
+        let net = matrix_network();
+        let error = sliced_network(&net, &[0]).unwrap_err();
+        assert!(error.contains("internal-index slicing only"), "{error}");
+        assert!(sliced_network(&net, &[1]).is_ok());
     }
 
     fn load_matrix_bytes<T: Scalar>(

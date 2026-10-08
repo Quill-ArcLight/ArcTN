@@ -345,6 +345,7 @@ fn populate_canonical_metadata(root: &mut Map<String, Value>) -> Result<(), Stri
             "flops_weight",
             "read_write_weight",
             "slicing_mode",
+            "allow_output_slicing",
             "generator_best_source",
             "chosen_path_stage",
             "method",

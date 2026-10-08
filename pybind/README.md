@@ -85,8 +85,20 @@ python -m maturin develop --release --manifest-path pybind/Cargo.toml
 
 `target_size` 是每个切片中生成的单个中间张量的元素数量上限，必须为正整数。
 `slicing_mode="fixed"` 保持已选定的收缩路径；`"dynamic"` 还允许局部调整收缩路径。
-两种模式均不对输出索引切片。请求切片时，两种模式都需要提供 `target_size`；
+请求切片时，两种模式都需要提供 `target_size`；
 未提供 `target_size` 时，不能使用 `"dynamic"`。
+
+`arctn_schedule`、`arctn_contract`、`arctn_plan`、`arctn_tree` 和 `ArcTNOptimizer`
+均接受 `allow_output_slicing`，默认值为 `False`，只允许选择内部索引。
+设为 `True` 后，Fixed 和 Dynamic 都可选择输出索引。执行时，内部切片在每个输出块内
+求和，再按原输出轴顺序组装各块；保存并加载的计划也保留这一切片方案。
+完整输出仍需全部存储空间，`target_size` 不限制最终输出大小或进程总内存。
+外部数组后端在原后端上组装输出块，需要支持 `stack`；不会为组装而转成 NumPy 数组。
+`tnmpi` 仍只支持内部索引切片，含输出索引切片的计划应使用单进程执行。
+
+开启输出索引切片后，公开适配层先从 Light/Heavy 引擎取得未切片的收缩序，再调用本仓库的
+公开切片代码。此流程兼容现有 ABI 1 引擎，不要求更换引擎动态库；详见
+[动态库接口说明](../docs/engine-interface.md#output-index-slicing-in-the-public-adapter)。
 
 ## Quimb
 

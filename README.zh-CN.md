@@ -32,7 +32,7 @@ ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和�
 
 [CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。
 
-MPI 是可选的切片并行执行功能。`tnmpi` 将切片分配给各进程，按已保存的收缩路径执行计算，最后对各进程的结果求和。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
+MPI 是可选的切片并行执行功能。`tnmpi` 只支持内部索引切片：将切片分配给各进程，按已保存的收缩路径执行计算，最后对各进程的结果求和。含输出索引切片的计划需要使用单进程执行。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
 
 <a id="rust"></a>
 
@@ -135,6 +135,8 @@ print("log2 largest intermediate:", result["log2_max_size"])
 这三个入口都通过 `preset` 选择 Light 或 Heavy。`arctn_contract` 还需要按 `inputs` 的顺序传入 `arrays`，默认使用 Rust CPU 执行器。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md#interfaces)。
 
 `arctn_schedule` 和 `arctn_contract` 接受 `target_size`，限制每个切片中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 的单位是秒，由搜索过程检查，不会由操作系统强制终止进程。
+
+切片默认使用 `allow_output_slicing=False`，只选择内部索引。设置 `allow_output_slicing=True` 并提供大小目标后，也可选择输出索引。执行时，内部切片在各输出块内求和，不同输出块按声明的输出轴顺序组装。完整输出仍需占用全部存储空间，其大小可以超过 `target_size`。`arctn_plan`、`arctn_tree` 和 `ArcTNOptimizer` 也接受这一选项。
 
 ### 执行已有收缩路径
 

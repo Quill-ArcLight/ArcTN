@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add opt-in output-index slicing through `allow_output_slicing=True`; the
+  default remains internal-index slicing only. Single-process execution sums
+  internal slices within output blocks and assembles the complete output in
+  its declared axis order. Saved plans support the same execution behavior.
+  The per-slice size target does not limit complete-output storage; MPI remains
+  internal-index only.
+- Keep compatibility with ABI 1 Light/Heavy engines: when output-index slicing
+  is enabled, the public adapter requests an unsliced order and applies the
+  public slicing implementation locally, without changing the ABI 1 request format.
 - Add independent, opt-in `integer-order-dp` and `integer-tree-cost` Cargo features
   for fixed-leaf-order DP and contraction-tree cost calculations, including local
   subtree replacement comparisons and cost-cache updates. Both are disabled by

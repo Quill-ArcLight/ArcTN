@@ -1,7 +1,7 @@
 # Light and Heavy engine interface
 
 The crate loads a native library implementing Light and Heavy. Network
-validation, final path validation, metrics, and numerical execution remain
+validation, final path validation, slicing, metrics, and numerical execution remain
 in this repository's source. Only libraries from a trusted provider should
 be loaded.
 
@@ -93,8 +93,9 @@ positive. `rate_enabled` enables the preset's cooperative rate stopping rule.
 
 `path` uses SSA tensor IDs. Inputs occupy `0..n-1`; step `k` produces `n+k`.
 `sliced_legs` is `null` when no target was requested. With a target, it is an
-array of index IDs, possibly empty when no slicing is needed. Output indices
-and repeated indices within an input cannot be sliced by this executor.
+array of index IDs, possibly empty when no slicing is needed. The adapter
+accepts only internal slice indices in an engine response. Indices repeated
+within one input remain unsupported for slicing.
 `wall_s` is the engine's finite, non-negative planning time in seconds.
 
 An unsuccessful call returns:
@@ -108,3 +109,20 @@ metrics, and checks the exact integer target. These checks do not protect
 against malicious native code: the engine is part of the caller's trusted
 process. The interface exposes the final path, slice selection, and planning
 time; the public adapter supplies validated metrics.
+
+## Output-index slicing in the public adapter
+
+`allow_output_slicing` is a public Rust/Python option with a default of `false`;
+it is not an additional field in the ABI 1 engine request. When enabled with a
+size target, the adapter requests an unsliced contraction order using
+`"target_size": null` and `"slicing_mode": "fixed"`. It then applies the requested
+Fixed or Dynamic slicing mode through this repository's public slicing code.
+The engine ABI and request format are unchanged, so existing ABI 1 engines
+remain compatible. With the option disabled, the existing engine request path
+is retained. The public planning result adds local slicing time to the
+engine's reported search time.
+
+Single-process execution sums internal slices within each output block and
+assembles the blocks in the declared output-axis order. The per-slice target
+does not limit storage for the complete output. MPI execution still supports
+internal-index slicing only.

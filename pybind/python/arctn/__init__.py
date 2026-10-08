@@ -310,7 +310,7 @@ def _compile_external_expression(inputs, output, size_dict, linear_path):
 def _compile_external_sliced_expression(
     inputs, output, size_dict, *, sliced_legs, ssa_path
 ):
-    """Compile one per-slice expression and its input index plans."""
+    """Compile one expression, input selections, and output-block axes."""
     linear_path = _ssa_to_linear_path(ssa_path, len(inputs))
     positions = {}
     for position, leg in enumerate(sliced_legs):
@@ -318,8 +318,6 @@ def _compile_external_sliced_expression(
             raise ValueError(f"切片腿 {leg} 重复出现")
         if leg not in size_dict:
             raise ValueError(f"切片腿 {leg} 不在 size_dict 中")
-        if leg in output:
-            raise ValueError(f"切片腿 {leg} 在 output 中")
         occurrences = [term.count(leg) for term in inputs]
         if not any(occurrences):
             raise ValueError(f"切片腿 {leg} 未被任何输入张量持有")
@@ -336,8 +334,9 @@ def _compile_external_sliced_expression(
         for leg, dimension in size_dict.items()
         if leg not in positions
     }
+    reduced_output = tuple(leg for leg in output if leg not in positions)
     expression = _compile_external_expression(
-        reduced_inputs, output, reduced_sizes, linear_path
+        reduced_inputs, reduced_output, reduced_sizes, linear_path
     )
 
     index_plans = []
@@ -345,16 +344,19 @@ def _compile_external_sliced_expression(
         plan = tuple(positions.get(leg) for leg in term)
         index_plans.append(plan if any(index is not None for index in plan) else None)
     slice_dimensions = tuple(size_dict[leg] for leg in sliced_legs)
-    return expression, tuple(index_plans), slice_dimensions
+    output_slices = tuple(
+        (positions[leg], axis)
+        for axis, leg in enumerate(output)
+        if leg in positions
+    )
+    return expression, tuple(index_plans), slice_dimensions, output_slices
 
 
 def _execute_external_sliced_expression(
-    expression, arrays, index_plans, slice_dimensions, *, backend
+    expression, arrays, index_plans, slice_dimensions, *, backend, output_slices=()
 ):
-    """Execute and sum every slice without changing the array backend."""
-    result = None
-    ranges = (range(dimension) for dimension in slice_dimensions)
-    for assignment in itertools.product(*ranges):
+    """Sum internal slices within each output block and restore output axes."""
+    def execute_assignment(assignment):
         sliced_arrays = []
         for array, plan in zip(arrays, index_plans):
             if plan is None:
@@ -365,12 +367,56 @@ def _execute_external_sliced_expression(
                 for position in plan
             )
             sliced_arrays.append(array[index])
-        part = expression(*sliced_arrays, backend=backend)
-        result = part if result is None else result + part
+        return expression(*sliced_arrays, backend=backend)
 
-    if result is None:  # Dimensions are validated as positive by the public API.
-        raise RuntimeError("切片执行没有生成任何切片")
-    return result
+    if not output_slices:
+        result = None
+        ranges = (range(dimension) for dimension in slice_dimensions)
+        for assignment in itertools.product(*ranges):
+            part = execute_assignment(assignment)
+            result = part if result is None else result + part
+        if result is None:  # Public dimensions are strictly positive.
+            raise RuntimeError("切片执行没有生成任何切片")
+        return result
+
+    # Keep assembly on the requested backend, including its device and
+    # autodiff graph. Stacking also works for immutable arrays such as JAX's.
+    if backend == "torch":
+        from torch import stack
+    else:
+        from opt_einsum.backends import get_func
+        stack = get_func("stack", "numpy" if backend == "object" else backend)
+
+    output_positions = tuple(position for position, _ in output_slices)
+    internal_positions = tuple(
+        position for position in range(len(slice_dimensions))
+        if position not in output_positions
+    )
+    blocks = []
+    output_ranges = (range(slice_dimensions[p]) for p in output_positions)
+    for output_assignment in itertools.product(*output_ranges):
+        assignment = [0] * len(slice_dimensions)
+        for position, value in zip(output_positions, output_assignment):
+            assignment[position] = value
+        block = None
+        internal_ranges = (range(slice_dimensions[p]) for p in internal_positions)
+        for internal_assignment in itertools.product(*internal_ranges):
+            for position, value in zip(internal_positions, internal_assignment):
+                assignment[position] = value
+            part = execute_assignment(assignment)
+            block = part if block is None else block + part
+        blocks.append(block)
+
+    # Reinsert the sliced output axes from last to first. Axes inserted later
+    # are still absent, so subtract their count from the original axis number.
+    for index in reversed(range(len(output_slices))):
+        position, axis = output_slices[index]
+        dimension = slice_dimensions[position]
+        blocks = [
+            stack(blocks[start:start + dimension], axis - index)
+            for start in range(0, len(blocks), dimension)
+        ]
+    return blocks[0]
 
 
 # Path-only opt_einsum interface.
@@ -406,12 +452,13 @@ class ArcTNOptimizer(_Base):
     obtains a ``ContractionTree`` and therefore preserves any slice indices
     selected by ``target_size``. ``call_count`` counts successful integration calls;
     ``calls`` retains the most recent 256 ``(input_count, path_step_count)``
-    entries.
+    entries. ``allow_output_slicing=True`` also permits slicing output indices
+    when ``target_size`` is set; the default permits internal indices only.
     """
 
     def __init__(self, *, preset="heavy", seed=0, max_time=None,
                  flops_weight=1.0, read_write_weight=64.0,
-                 target_size=None, slicing_mode="fixed"):
+                 target_size=None, slicing_mode="fixed", allow_output_slicing=False):
         self.preset = _validate_auto_preset(preset)
         self.seed = int(seed)
         self.max_time = _validate_max_time(max_time)
@@ -421,6 +468,9 @@ class ArcTNOptimizer(_Base):
         self.target_size = _validate_target_size(target_size)
         self.slicing_mode = _validate_slicing_mode(
             slicing_mode, self.target_size
+        )
+        self.allow_output_slicing = _validate_bool(
+            allow_output_slicing, "allow_output_slicing"
         )
         # Keep recent integration diagnostics without unbounded growth.
         self.calls = []
@@ -466,6 +516,7 @@ class ArcTNOptimizer(_Base):
             seed=self.seed,
             target_size=self.target_size,
             slicing_mode=self.slicing_mode,
+            allow_output_slicing=self.allow_output_slicing,
             max_time=self.max_time,
             flops_weight=self.flops_weight,
             read_write_weight=self.read_write_weight,
@@ -485,6 +536,8 @@ class ArcTNOptimizer(_Base):
         if self.target_size is not None:
             bits.append(f"target_size={self.target_size}")
             bits.append(f"slicing_mode={self.slicing_mode!r}")
+        if self.allow_output_slicing:
+            bits.append("allow_output_slicing=True")
         return "ArcTNOptimizer(" + ", ".join(bits) + ")"
 
 
@@ -492,7 +545,7 @@ class ArcTNOptimizer(_Base):
 
 def arctn_tree(inputs, output, size_dict, *, preset="heavy", seed=0,
                target_size=None, slicing_mode="fixed", max_time=None, flops_weight=1.0,
-               read_write_weight=64.0, return_info=False):
+               read_write_weight=64.0, return_info=False, allow_output_slicing=False):
     """Build a cotengra ``ContractionTree`` from an ArcTN plan.
 
     :class:`ArcTNOptimizer` delegates its ``search`` method to this
@@ -504,6 +557,10 @@ def arctn_tree(inputs, output, size_dict, *, preset="heavy", seed=0,
     ----------
     target_size : int, optional
         Maximum elements in one intermediate tensor per slice.
+    allow_output_slicing : bool
+        Permit output indices as well as internal indices when slicing to a
+        target. Defaults to ``False``. The complete output still occupies its
+        original number of elements.
     slicing_mode : {"fixed", "dynamic"}
         ``fixed`` is the default and preserves the path selected before slicing.
         ``dynamic`` may change that path and requires ``target_size``.
@@ -527,6 +584,7 @@ def arctn_tree(inputs, output, size_dict, *, preset="heavy", seed=0,
     )
     target_size = _validate_target_size(target_size)
     slicing_mode = _validate_slicing_mode(slicing_mode, target_size)
+    allow_output_slicing = _validate_bool(allow_output_slicing, "allow_output_slicing")
     has_target = target_size is not None
     target_log2 = math.log2(target_size) if has_target else None
     inputs_i, output_i, size_i, label_of = _to_int_labels(inputs, output, size_dict)
@@ -534,6 +592,7 @@ def arctn_tree(inputs, output, size_dict, *, preset="heavy", seed=0,
         info = _rs.optimize_auto_full(
             inputs_i, output_i, size_i, seed=seed, use_ssa=True,
             preset=preset, max_time=max_time, slicing_mode=slicing_mode,
+            allow_output_slicing=allow_output_slicing,
             flops_weight=flops_weight,
             read_write_weight=read_write_weight,
         )
@@ -542,6 +601,7 @@ def arctn_tree(inputs, output, size_dict, *, preset="heavy", seed=0,
             inputs_i, output_i, size_i, seed=seed, use_ssa=True,
             preset=preset, max_time=max_time, target_size=target_size,
             slicing_mode=slicing_mode,
+            allow_output_slicing=allow_output_slicing,
             flops_weight=flops_weight, read_write_weight=read_write_weight,
         )
         if not info["sliced"]:
@@ -557,6 +617,7 @@ def arctn_tree(inputs, output, size_dict, *, preset="heavy", seed=0,
     if return_info:
         info = dict(info)
         info["target_size"] = target_size
+        info["allow_output_slicing"] = allow_output_slicing
         info["target_log2_size"] = target_log2
         info["symbol_of"] = sym_of
         sliced_set = set(info.get("sliced_legs") or [])
@@ -842,12 +903,13 @@ def _attach_dtype_contraction_memory_estimates(info, dtype):
 def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
                    target_size=None, slicing_mode="fixed", max_time=None, backend="native",
                    flops_weight=1.0, read_write_weight=64.0,
-                   return_info=False):
+                   return_info=False, allow_output_slicing=False):
     """Plan, optionally slice, and execute with an explicit backend.
 
     ``native`` uses ArcTN's executor and Rayon slice parallelism. Every other
     explicit backend name is delegated to opt_einsum. Sliced execution reuses
-    one fixed per-slice expression and accumulates its results on that backend.
+    one fixed per-slice expression, sums internal slices within each output
+    block, and assembles output blocks on that backend.
     External arrays remain owned by their backend.
     The default wheel does not enable matrixmultiply's optional thread pool.
 
@@ -859,6 +921,10 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
         are checked through ``shape`` and ``dtype`` without a host copy.
     target_size : int, optional
         Maximum elements in one intermediate tensor per slice.
+    allow_output_slicing : bool
+        Permit output indices as well as internal indices when slicing to a
+        target. Defaults to ``False``. The complete output still occupies its
+        original number of elements.
     slicing_mode : {"fixed", "dynamic"}
         ``fixed`` is the default and preserves the path selected before slicing.
         ``dynamic`` may change that path and requires ``target_size``.
@@ -882,7 +948,8 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
     Native sliced execution gives each in-flight slice its own input copy.
     External sliced execution enumerates slice assignments serially and leaves
     tensor allocation to the selected array backend. ``target_size`` constrains
-    one intermediate tensor, not aggregate resident memory.
+    one intermediate tensor, not aggregate resident memory or the complete
+    output allocation. Output-block assembly requires backend stack support.
     """
     inputs = tuple(tuple(term) for term in inputs)
     output = tuple(output)
@@ -895,6 +962,7 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
     )
     target_size = _validate_target_size(target_size)
     slicing_mode = _validate_slicing_mode(slicing_mode, target_size)
+    allow_output_slicing = _validate_bool(allow_output_slicing, "allow_output_slicing")
     has_target = target_size is not None
     target_log2 = math.log2(target_size) if has_target else None
     inputs_i, output_i, size_i, _ = _to_int_labels(
@@ -909,6 +977,7 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
         inputs_i, output_i, size_i, seed=seed, use_ssa=True,
         preset=preset, max_time=max_time, target_size=target_size,
         slicing_mode=slicing_mode,
+        allow_output_slicing=allow_output_slicing,
         flops_weight=flops_weight, read_write_weight=read_write_weight,
     )
     if has_target:
@@ -933,7 +1002,7 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
         execution_implementation = "arctn.contract_sliced"
     elif sliced_legs:
         expression_compile_started = time.perf_counter()
-        expression, index_plans, slice_dimensions = (
+        expression, index_plans, slice_dimensions, output_slices = (
             _compile_external_sliced_expression(
                 inputs_i,
                 output_i,
@@ -953,6 +1022,7 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
             index_plans,
             slice_dimensions,
             backend=backend,
+            output_slices=output_slices,
         )
         execution_dispatch_wall_s = time.perf_counter() - execution_started
         execution_implementation = "arctn.sliced_contract_expression"
@@ -982,6 +1052,7 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
     if return_info:
         info = dict(info)
         info["target_size"] = target_size
+        info["allow_output_slicing"] = allow_output_slicing
         info["target_log2_size"] = target_log2
         info["execution_backend"] = backend
         info["execution_implementation"] = execution_implementation
@@ -1006,7 +1077,7 @@ def arctn_contract(inputs, output, size_dict, arrays, *, preset="heavy", seed=0,
 def arctn_schedule(inputs, output, size_dict, *, preset="heavy", seed=0,
                    target_size=None, slicing_mode="fixed", max_time=None, use_ssa=False,
                    flops_weight=1.0, read_write_weight=64.0,
-                   rate_enabled=True):
+                   rate_enabled=True, allow_output_slicing=False):
     """Run a public Auto preset and return its final planning result.
 
     Report fields
@@ -1020,6 +1091,9 @@ def arctn_schedule(inputs, output, size_dict, *, preset="heavy", seed=0,
         Objective and weights used to score the final path.
     ``sliced`` / ``sliced_legs`` / ``log2_n_slices`` / ``sliced_log10_flops_total`` / ...
         Slice plan. An unreachable ``target_size`` raises ``ValueError``.
+    ``allow_output_slicing``
+        Whether output indices are eligible for slicing. Defaults to ``False``;
+        set ``True`` to allow a target smaller than the complete output.
     ``slicing_mode``
         ``fixed`` preserves the path selected before slicing. ``dynamic`` may
         change that path and requires ``target_size``. ``fixed`` is the default.
@@ -1038,12 +1112,14 @@ def arctn_schedule(inputs, output, size_dict, *, preset="heavy", seed=0,
     )
     target_size = _validate_target_size(target_size)
     slicing_mode = _validate_slicing_mode(slicing_mode, target_size)
+    allow_output_slicing = _validate_bool(allow_output_slicing, "allow_output_slicing")
     rate_enabled = _validate_bool(rate_enabled, "rate_enabled")
     inputs_i, output_i, size_i, _ = _to_int_labels(inputs, output, size_dict)
     report = _rs.optimize_auto_full(
         inputs_i, output_i, size_i, seed=seed, use_ssa=use_ssa,
         preset=preset, max_time=max_time, target_size=target_size,
         slicing_mode=slicing_mode,
+        allow_output_slicing=allow_output_slicing,
         flops_weight=flops_weight, read_write_weight=read_write_weight,
         rate_enabled=rate_enabled,
     )
@@ -1053,6 +1129,7 @@ def arctn_schedule(inputs, output, size_dict, *, preset="heavy", seed=0,
     report["max_time"] = max_time
     report["rate_enabled"] = rate_enabled
     report["target_size"] = target_size
+    report["allow_output_slicing"] = allow_output_slicing
     report["target_log2_size"] = (
         math.log2(target_size) if target_size is not None else None
     )
