@@ -9,7 +9,7 @@ readme = "README.md"
 build = "build.rs"
 # PyO3 0.29 requires Rust 1.83 or newer.
 rust-version = "1.83"
-homepage = "https://github.com/Quill-ArcLight/arctn-public"
+homepage = "https://github.com/Quill-ArcLight/ArcTN"
 publish = false
 
 # Keep PyO3 out of the core library dependency graph.
@@ -18,15 +18,16 @@ name = "arctn_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-arctn = { path = "..", version = "=1.0.0" }
+arctn = { path = "..", version = "=1.0.0", default-features = false }
 pyo3 = { version = "0.29", features = ["extension-module"] }
 # NumPy conversion for DenseTensor execution.
 numpy = "0.29"
 num-complex = "0.4"
 
 [features]
-# Optional integer cost arithmetic in the public standalone algorithms.
+# Match the public Rust defaults, while allowing --no-default-features here.
 # A separately built Light/Heavy engine selects its own features.
+default = ["integer-order-dp"]
 integer-order-dp = ["arctn/integer-order-dp"]
 integer-tree-cost = ["arctn/integer-tree-cost"]
 # Optional benchmark/production build: enable matrixmultiply's inner-GEMM

@@ -7,9 +7,9 @@
 //! leg weight of a split to be queried in `O(1)`. Adjacent pairs cross any
 //! boundary uniquely, including legs with more than two holders.
 //!
-//! With the opt-in `integer-order-dp` feature, binary dimensions use checked
+//! With the default `integer-order-dp` feature, binary dimensions use checked
 //! integer costs for supported objectives when a complete cost fits u128.
-//! Default builds and unsupported cases retain the original arithmetic.
+//! Builds without this feature and unsupported cases use the original arithmetic.
 //! Complexity is `O(n^3)` time and `O(n^2)` memory.
 
 mod cost;

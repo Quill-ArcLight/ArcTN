@@ -10,9 +10,9 @@ license = "LicenseRef-Arclight-NC-Source-1.0"
 readme = "README.md"
 build = "build.rs"
 rust-version = "1.82"
-homepage = "https://github.com/Quill-ArcLight/arctn-public"
+homepage = "https://github.com/Quill-ArcLight/ArcTN"
 documentation = "https://quantumquill.arclightquantum.com/docs/arctn/index.html"
-repository = "https://github.com/Quill-ArcLight/arctn-public"
+repository = "https://github.com/Quill-ArcLight/ArcTN"
 keywords = ["tensor-network", "tensor-contraction", "einsum", "quantum"]
 categories = ["algorithms", "mathematics", "science"]
 # Include only source, tests, and required documentation in the crates.io package.
@@ -49,8 +49,10 @@ libloading = "0.8"
 mpi = { version = "0.8", optional = true, features = ["complex"] }
 
 [features]
-# Experimental cost arithmetic; both are opt-in and independently selectable.
+# Fixed-leaf-order DP uses checked integer costs by default when supported.
+default = ["integer-order-dp"]
 integer-order-dp = []
+# Contraction-tree integer costs remain opt-in.
 integer-tree-cost = []
 mpi = ["dep:mpi"]
 # Enable matrixmultiply's GEMM thread pool, capped at four threads.

@@ -152,6 +152,7 @@ fn validate_complete_plan_delivery(
 }
 
 /// Returns the source identity embedded when the executable was built.
+/// Features describe this executable, not a separately loaded Light/Heavy engine.
 fn build_info_json() -> String {
     let version = serde_json::to_string(env!("CARGO_PKG_VERSION"))
         .expect("package version must serialize as JSON");
@@ -164,9 +165,11 @@ fn build_info_json() -> String {
             .expect("embedded source state must serialize as JSON");
     let mt = env!("ARCTN_BUILD_FEATURE_MT") == "1";
     let mpi = env!("ARCTN_BUILD_FEATURE_MPI") == "1";
+    let integer_order_dp = env!("ARCTN_BUILD_FEATURE_INTEGER_ORDER_DP") == "1";
+    let integer_tree_cost = env!("ARCTN_BUILD_FEATURE_INTEGER_TREE_COST") == "1";
     // JSON-escape the build metadata while preserving field order.
     format!(
-        "{{\"version\":{version},\"git_commit\":{commit},\"source_state\":{source_state},\"profile\":{profile},\"features\":{{\"mt\":{mt},\"mpi\":{mpi}}}}}"
+        "{{\"version\":{version},\"git_commit\":{commit},\"source_state\":{source_state},\"profile\":{profile},\"features\":{{\"mt\":{mt},\"mpi\":{mpi},\"integer-order-dp\":{integer_order_dp},\"integer-tree-cost\":{integer_tree_cost}}}}}"
     )
 }
 
@@ -1427,6 +1430,29 @@ mod build_info_tests {
         assert_eq!(
             info["features"]["mpi"],
             env!("ARCTN_BUILD_FEATURE_MPI") == "1"
+        );
+        assert_eq!(
+            info["features"]["integer-order-dp"],
+            env!("ARCTN_BUILD_FEATURE_INTEGER_ORDER_DP") == "1"
+        );
+        assert_eq!(
+            info["features"]["integer-tree-cost"],
+            env!("ARCTN_BUILD_FEATURE_INTEGER_TREE_COST") == "1"
+        );
+    }
+
+    #[test]
+    fn build_info_features_match_compiled_configuration() {
+        let info: serde_json::Value = serde_json::from_str(&build_info_json()).unwrap();
+        assert_eq!(info["features"]["mt"], cfg!(feature = "mt"));
+        assert_eq!(info["features"]["mpi"], cfg!(feature = "mpi"));
+        assert_eq!(
+            info["features"]["integer-order-dp"],
+            cfg!(feature = "integer-order-dp")
+        );
+        assert_eq!(
+            info["features"]["integer-tree-cost"],
+            cfg!(feature = "integer-tree-cost")
         );
     }
 

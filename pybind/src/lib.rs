@@ -468,10 +468,19 @@ where
 }
 
 /// Return the loaded extension's identity and repository state at compilation.
+/// Features describe this extension, not a separately loaded Light/Heavy engine.
 #[pyfunction]
 fn build_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
     let features = PyDict::new(py);
     features.set_item("mt", env!("ARCTN_PY_BUILD_FEATURE_MT") == "1")?;
+    features.set_item(
+        "integer-order-dp",
+        env!("ARCTN_PY_BUILD_FEATURE_INTEGER_ORDER_DP") == "1",
+    )?;
+    features.set_item(
+        "integer-tree-cost",
+        env!("ARCTN_PY_BUILD_FEATURE_INTEGER_TREE_COST") == "1",
+    )?;
     let value = PyDict::new(py);
     value.set_item("version", env!("CARGO_PKG_VERSION"))?;
     value.set_item("commit", env!("ARCTN_PY_BUILD_COMMIT"))?;

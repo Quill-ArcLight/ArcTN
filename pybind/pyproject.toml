@@ -28,8 +28,8 @@ dependencies = ["numpy>=1.23"]
 
 [project.urls]
 Documentation = "https://quantumquill.arclightquantum.com/docs/arctn/index.html"
-Source = "https://github.com/Quill-ArcLight/arctn-public"
-Issues = "https://github.com/Quill-ArcLight/arctn-public/issues"
+Source = "https://github.com/Quill-ArcLight/ArcTN"
+Issues = "https://github.com/Quill-ArcLight/ArcTN/issues"
 
 [project.optional-dependencies]
 execution = [

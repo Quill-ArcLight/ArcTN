@@ -78,6 +78,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_MT");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_MPI");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_INTEGER_ORDER_DP");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_INTEGER_TREE_COST");
 
     let root = std::env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from);
     if let Some(root) = root.as_deref() {
@@ -99,10 +101,20 @@ fn main() {
     let source_state = root.as_deref().map(git_source_state).unwrap_or("unknown");
     let mt = std::env::var_os("CARGO_FEATURE_MT").is_some();
     let mpi = std::env::var_os("CARGO_FEATURE_MPI").is_some();
+    let integer_order_dp = std::env::var_os("CARGO_FEATURE_INTEGER_ORDER_DP").is_some();
+    let integer_tree_cost = std::env::var_os("CARGO_FEATURE_INTEGER_TREE_COST").is_some();
 
     println!("cargo:rustc-env=ARCTN_GIT_COMMIT={commit}");
     println!("cargo:rustc-env=ARCTN_BUILD_SOURCE_STATE={source_state}");
     println!("cargo:rustc-env=ARCTN_BUILD_PROFILE={profile}");
     println!("cargo:rustc-env=ARCTN_BUILD_FEATURE_MT={}", u8::from(mt));
     println!("cargo:rustc-env=ARCTN_BUILD_FEATURE_MPI={}", u8::from(mpi));
+    println!(
+        "cargo:rustc-env=ARCTN_BUILD_FEATURE_INTEGER_ORDER_DP={}",
+        u8::from(integer_order_dp)
+    );
+    println!(
+        "cargo:rustc-env=ARCTN_BUILD_FEATURE_INTEGER_TREE_COST={}",
+        u8::from(integer_tree_cost)
+    );
 }

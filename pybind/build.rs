@@ -72,6 +72,8 @@ fn main() {
 
     println!("cargo:rerun-if-env-changed=ARCTN_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_MT");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_INTEGER_ORDER_DP");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_INTEGER_TREE_COST");
 
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let root = manifest
@@ -99,5 +101,13 @@ fn main() {
     println!(
         "cargo:rustc-env=ARCTN_PY_BUILD_FEATURE_MT={}",
         u8::from(std::env::var_os("CARGO_FEATURE_MT").is_some())
+    );
+    println!(
+        "cargo:rustc-env=ARCTN_PY_BUILD_FEATURE_INTEGER_ORDER_DP={}",
+        u8::from(std::env::var_os("CARGO_FEATURE_INTEGER_ORDER_DP").is_some())
+    );
+    println!(
+        "cargo:rustc-env=ARCTN_PY_BUILD_FEATURE_INTEGER_TREE_COST={}",
+        u8::from(std::env::var_os("CARGO_FEATURE_INTEGER_TREE_COST").is_some())
     );
 }

@@ -50,16 +50,19 @@ cargo run --example contraction
 
 `RAYON_NUM_THREADS` sets the size of the default Rayon thread pool. Applications can also use their own Rayon pools. The Cargo `mt` feature enables a separate matrix multiplication thread pool. When combining it with parallel slice execution, limit the total number of threads to avoid oversubscribing the available CPU cores.
 
-The experimental Cargo features `integer-order-dp` (fixed-leaf-order DP) and
-`integer-tree-cost` (contraction-tree costs, including subtree reconfiguration)
-are independently selectable and disabled by default. To enable both, use
-`cargo build --release --locked --features integer-order-dp,integer-tree-cost`.
-They use checked integer costs for dimension-two networks with supported objectives;
-unsupported or unrepresentable cases use the previous arithmetic. Exact comparisons
-can change the search trajectory, and enabling these features does not guarantee
-better contraction paths. Subset-DP integer arithmetic remains enabled independently.
-Python source builds can select the same Cargo features; rebuilding the public
-extension does not change the feature settings of a separately built Light/Heavy engine.
+The Cargo feature `integer-order-dp` (fixed-leaf-order DP) is enabled by default.
+The experimental `integer-tree-cost` feature (contraction-tree costs, including
+subtree reconfiguration) remains opt-in; enable it with
+`cargo build --release --locked --features integer-tree-cost`.
+Use `--no-default-features` to disable fixed-leaf-order integer costs.
+Both features use checked integer costs for dimension-two networks with supported
+objectives; unsupported or unrepresentable cases use the previous arithmetic.
+Exact comparisons can change the search trajectory and do not guarantee better
+contraction paths. Fixed-leaf-order integer DP also uses larger cost-table entries.
+Subset-DP integer arithmetic remains enabled independently.
+Python source builds use the same defaults and accept the same Cargo feature flags;
+rebuilding the public extension does not change the feature settings of a separately
+built Light/Heavy engine.
 
 <a id="python"></a>
 

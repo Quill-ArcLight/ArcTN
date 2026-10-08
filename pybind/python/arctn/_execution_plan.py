@@ -620,6 +620,13 @@ def arctn_plan(
     slicing_mode = _validate_slicing_mode(slicing_mode, target_size)
     rate_enabled = _validate_bool(rate_enabled, "rate_enabled")
     allow_output_slicing = _validate_bool(allow_output_slicing, "allow_output_slicing")
+    # Planning and plan construction both read the network. Snapshot it once
+    # so generators (including each input term) describe the same network twice.
+    inputs = tuple(tuple(term) for term in inputs)
+    output = tuple(output)
+    if not hasattr(size_dict, "items"):
+        raise TypeError("size_dict 必须是提供 .items() 的映射（腿标签 → 正整数维度）")
+    size_dict = dict(size_dict.items())
     report = arctn_schedule(
         inputs,
         output,
