@@ -2,9 +2,15 @@
 //!
 //! Each tensor occupies one bit. Connected components are solved separately,
 //! then their roots are merged by an exact outer-product DP. Cost is exponential.
+//! Binary dimensions use exact u128 costs when a conservative bound fits and the
+//! objective is a single term or the default FLOPs + 64 * read/write objective.
+//! Other inputs retain the original arithmetic. Reported metrics still use logs.
 
 use std::collections::HashMap;
 use std::time::Instant;
+
+mod cost;
+use cost::{BinaryCosts, CostArithmetic, LogCosts};
 
 /// Multiplicative hasher for integer-keyed tables.
 /// Iteration order is controlled separately by `by_size`.
@@ -39,11 +45,14 @@ struct LegMetadata {
 }
 
 impl LegMetadata {
-    fn new(net: &TensorNetwork) -> Self {
+    fn new(net: &TensorNetwork, use_logs: bool) -> Self {
         let index = LegIndex::new(net.size_dict.keys().copied());
-        let mut log2_dims = vec![0.0; index.len()];
-        for (&leg, &dim) in &net.size_dict {
-            log2_dims[index.slot(leg)] = (dim as f64).log2();
+        let mut log2_dims = Vec::new();
+        if use_logs {
+            log2_dims.resize(index.len(), 0.0);
+            for (&leg, &dim) in &net.size_dict {
+                log2_dims[index.slot(leg)] = (dim as f64).log2();
+            }
         }
         let mut is_output = vec![false; index.len()];
         for &leg in &net.output {
@@ -100,31 +109,31 @@ fn union_log2_sum(x: &[LegId], y: &[LegId], metadata: &LegMetadata) -> f64 {
 use crate::network::{LegId, LegIndex, TensorNetwork};
 use crate::objective::{ObjectiveKind, PlannerObjective};
 use crate::path::{
-    legs_union, logaddexp2, simulate_path, simulate_path_flops_log2_and_legs, simulate_path_legs,
-    sorted_dedup, PathStats, SsaPath,
+    legs_union, simulate_path, simulate_path_flops_log2_and_legs, simulate_path_legs, sorted_dedup,
+    PathStats, SsaPath,
 };
 
 /// Best contraction for one tensor subset.
 #[derive(Clone, Debug)]
-struct Entry {
+struct Entry<V> {
     /// Minimum objective score for contracting this subset.
-    cost: f64,
+    cost: V,
     /// Sorted free legs after contracting the subset.
     legs: Vec<LegId>,
     /// Adjacent tensors outside the subset, encoded as a bitmask.
     adj: u64,
     /// Left subset of the best split; zero identifies a leaf.
     left: u64,
-    /// Log2 read size as input to the next contraction.
-    read_log2: f64,
+    /// Input size represented by the selected cost arithmetic.
+    read_size: V,
 }
 
 #[derive(Clone, Debug)]
-struct OuterEntry {
-    cost: f64,
+struct OuterEntry<V> {
+    cost: V,
     legs: Vec<LegId>,
     left: u64,
-    read_log2: f64,
+    read_size: V,
 }
 
 pub const DEFAULT_MAX_N: usize = 26;
@@ -222,15 +231,33 @@ fn optimal_dp_path<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         return Err("空网络".into());
     }
 
+    if BinaryCosts::supports(net, objective) {
+        optimal_dp_path_impl::<BinaryCosts, TRACK_FLOPS, TRACK_READ_WRITE>(net, deadline, objective)
+    } else {
+        optimal_dp_path_impl::<LogCosts, TRACK_FLOPS, TRACK_READ_WRITE>(net, deadline, objective)
+    }
+}
+
+fn optimal_dp_path_impl<
+    C: CostArithmetic,
+    const TRACK_FLOPS: bool,
+    const TRACK_READ_WRITE: bool,
+>(
+    net: &TensorNetwork,
+    deadline: Option<Instant>,
+    objective: PlannerObjective,
+) -> Result<SsaPath, String> {
+    let n = net.n_tensors();
+    let metadata = LegMetadata::new(net, C::USE_LOGS);
     // Sorted, deduplicated input legs.
     let input_legs: Vec<Vec<LegId>> = net.inputs.iter().map(|t| sorted_dedup(t)).collect();
-    let input_read_log2 = if TRACK_READ_WRITE {
+    let input_read_size = if TRACK_READ_WRITE {
         net.inputs
             .iter()
-            .map(|tensor| tensor.iter().map(|&leg| net.log2_dim(leg)).sum::<f64>())
+            .map(|tensor| C::size(tensor, &metadata))
             .collect::<Vec<_>>()
     } else {
-        vec![f64::NEG_INFINITY; n]
+        vec![C::ZERO; n]
     };
     // Tensor-holder bitmask for each leg.
     let mut holders: FastMap<LegId, u64> = FastMap::default();
@@ -242,7 +269,6 @@ fn optimal_dp_path<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
             *holders.entry(l).or_insert(0) |= 1u64 << i;
         }
     }
-    let metadata = LegMetadata::new(net);
 
     // Solve shared-leg connected components independently.
     let mut comp_id = vec![usize::MAX; n];
@@ -274,15 +300,15 @@ fn optimal_dp_path<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     }
 
     let mut path: SsaPath = Vec::new();
-    let mut roots: Vec<(usize, Vec<LegId>, f64)> = Vec::new();
+    let mut roots: Vec<(usize, Vec<LegId>, C::Value)> = Vec::new();
     for c in 0..n_comps {
         if deadline_reached(deadline) {
             return Err("optimal-dp deadline exceeded".into());
         }
         let members: Vec<usize> = (0..n).filter(|&i| comp_id[i] == c).collect();
-        let (root, legs) = dp_component::<TRACK_FLOPS, TRACK_READ_WRITE>(
+        let (root, legs) = dp_component::<C, TRACK_FLOPS, TRACK_READ_WRITE>(
             &input_legs,
-            &input_read_log2,
+            &input_read_size,
             &holders,
             &metadata,
             &members,
@@ -291,16 +317,16 @@ fn optimal_dp_path<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
             deadline,
             objective,
         )?;
-        let read_log2 = if !TRACK_READ_WRITE {
-            f64::NEG_INFINITY
+        let read_size = if !TRACK_READ_WRITE {
+            C::ZERO
         } else if members.len() == 1 {
-            input_read_log2[members[0]]
+            input_read_size[members[0]]
         } else {
-            legs.iter().map(|&l| metadata.log2_dim(l)).sum()
+            C::size(&legs, &metadata)
         };
-        roots.push((root, legs, read_log2));
+        roots.push((root, legs, read_size));
     }
-    append_optimal_outer_products::<TRACK_FLOPS, TRACK_READ_WRITE>(
+    append_optimal_outer_products::<C, TRACK_FLOPS, TRACK_READ_WRITE>(
         &roots, &metadata, &mut path, n, deadline, objective,
     )?;
 
@@ -310,8 +336,12 @@ fn optimal_dp_path<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     Ok(path)
 }
 
-fn append_optimal_outer_products<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
-    roots: &[(usize, Vec<LegId>, f64)],
+fn append_optimal_outer_products<
+    C: CostArithmetic,
+    const TRACK_FLOPS: bool,
+    const TRACK_READ_WRITE: bool,
+>(
+    roots: &[(usize, Vec<LegId>, C::Value)],
     metadata: &LegMetadata,
     path: &mut SsaPath,
     n_inputs: usize,
@@ -323,17 +353,17 @@ fn append_optimal_outer_products<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
         return Ok(());
     }
     let full = if k == 64 { !0u64 } else { (1u64 << k) - 1 };
-    let mut table: FastMap<u64, OuterEntry> = FastMap::default();
+    let mut table: FastMap<u64, OuterEntry<C::Value>> = FastMap::default();
     let mut by_size = vec![Vec::new(); k + 1];
-    for (index, (_, legs, read_log2)) in roots.iter().enumerate() {
+    for (index, (_, legs, read_size)) in roots.iter().enumerate() {
         let mask = 1u64 << index;
         table.insert(
             mask,
             OuterEntry {
-                cost: f64::NEG_INFINITY,
+                cost: C::ZERO,
                 legs: legs.clone(),
                 left: 0,
-                read_log2: *read_log2,
+                read_size: *read_size,
             },
         );
         by_size[1].push(mask);
@@ -358,27 +388,27 @@ fn append_optimal_outer_products<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
                     }
                     let left = &table[&left_mask];
                     let right = &table[&right_mask];
-                    let step_log2 = if TRACK_FLOPS {
-                        union_log2_sum(&left.legs, &right.legs, metadata)
+                    let step_flops = if TRACK_FLOPS {
+                        C::union_size(&left.legs, &right.legs, metadata)
                     } else {
-                        f64::NEG_INFINITY
+                        C::ZERO
                     };
                     let result_legs = legs_union(&left.legs, &right.legs)
                         .into_iter()
                         .filter(|&leg| metadata.is_output(leg))
                         .collect::<Vec<_>>();
-                    let result_log2 = if TRACK_READ_WRITE {
-                        result_legs.iter().map(|&leg| metadata.log2_dim(leg)).sum()
+                    let result_size = if TRACK_READ_WRITE {
+                        C::size(&result_legs, metadata)
                     } else {
-                        f64::NEG_INFINITY
+                        C::ZERO
                     };
-                    let read_write_log2 = if TRACK_READ_WRITE {
-                        logaddexp2(logaddexp2(left.read_log2, right.read_log2), result_log2)
+                    let read_write = if TRACK_READ_WRITE {
+                        C::add(C::add(left.read_size, right.read_size), result_size)
                     } else {
-                        f64::NEG_INFINITY
+                        C::ZERO
                     };
-                    let step_score = objective.score_terms_log2(step_log2, read_write_log2);
-                    let cost = logaddexp2(logaddexp2(left.cost, right.cost), step_score);
+                    let step_score = C::score(step_flops, read_write, objective);
+                    let cost = C::add(C::add(left.cost, right.cost), step_score);
                     let mask = left_mask | right_mask;
                     if table.get(&mask).is_some_and(|entry| entry.cost <= cost) {
                         continue;
@@ -390,7 +420,7 @@ fn append_optimal_outer_products<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
                                 cost,
                                 legs: result_legs,
                                 left: left_mask,
-                                read_log2: result_log2,
+                                read_size: result_size,
                             },
                         )
                         .is_some();
@@ -402,10 +432,10 @@ fn append_optimal_outer_products<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
         }
     }
 
-    fn emit(
+    fn emit<V>(
         mask: u64,
-        table: &FastMap<u64, OuterEntry>,
-        roots: &[(usize, Vec<LegId>, f64)],
+        table: &FastMap<u64, OuterEntry<V>>,
+        roots: &[(usize, Vec<LegId>, V)],
         path: &mut SsaPath,
         n_inputs: usize,
     ) -> usize {
@@ -428,9 +458,9 @@ fn append_optimal_outer_products<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
 
 /// Solve one connected component and append globally numbered SSA steps.
 #[allow(clippy::too_many_arguments)]
-fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
+fn dp_component<C: CostArithmetic, const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     input_legs: &[Vec<LegId>],
-    input_read_log2: &[f64],
+    input_read_size: &[C::Value],
     holders: &FastMap<LegId, u64>,
     metadata: &LegMetadata,
     members: &[usize],
@@ -470,7 +500,7 @@ fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         metadata.is_output(l)
     };
 
-    let mut table: FastMap<u64, Entry> = FastMap::default();
+    let mut table: FastMap<u64, Entry<C::Value>> = FastMap::default();
     let mut by_size: Vec<Vec<u64>> = vec![Vec::new(); k + 1];
     for li in 0..k {
         let gi = glob(li);
@@ -484,15 +514,11 @@ fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         table.insert(
             mask,
             Entry {
-                cost: if TRACK_FLOPS && !TRACK_READ_WRITE {
-                    0.0
-                } else {
-                    f64::NEG_INFINITY
-                },
+                cost: C::component_zero::<TRACK_FLOPS, TRACK_READ_WRITE>(),
                 legs,
                 adj,
                 left: 0,
-                read_log2: input_read_log2[gi],
+                read_size: input_read_size[gi],
             },
         );
         by_size[1].push(mask);
@@ -531,18 +557,20 @@ fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                     let e1 = &table[&m1];
                     let e2 = &table[&m2];
                     // Materialize result legs only after the score can improve.
-                    let step_log2 = if TRACK_FLOPS {
-                        union_log2_sum(&e1.legs, &e2.legs, metadata)
+                    let step_flops = if TRACK_FLOPS {
+                        C::union_size(&e1.legs, &e2.legs, metadata)
                     } else {
-                        f64::NEG_INFINITY
+                        C::ZERO
                     };
                     let m = m1 | m2;
-                    let (cost, result_legs, result_log2) = if TRACK_FLOPS && !TRACK_READ_WRITE {
-                        let step = step_log2.exp2();
-                        let total = e1.cost + e2.cost + step;
-                        if !step.is_finite() || !total.is_finite() {
-                            return Err("pure-FLOPs linear f64 overflow in local optimal DP".into());
-                        }
+                    let (cost, result_legs, result_size) = if TRACK_FLOPS && !TRACK_READ_WRITE {
+                        let total = C::component_total::<TRACK_FLOPS, TRACK_READ_WRITE>(
+                            e1.cost,
+                            e2.cost,
+                            step_flops,
+                            C::ZERO,
+                            objective,
+                        )?;
                         if table.get(&m).is_some_and(|prev| prev.cost <= total) {
                             continue;
                         }
@@ -550,22 +578,21 @@ fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                             .into_iter()
                             .filter(|&l| is_free(l, m, &lholders))
                             .collect::<Vec<_>>();
-                        (total, legs, f64::NEG_INFINITY)
+                        (total, legs, C::ZERO)
                     } else {
                         let legs = legs_union(&e1.legs, &e2.legs)
                             .into_iter()
                             .filter(|&l| is_free(l, m, &lholders))
                             .collect::<Vec<_>>();
-                        let result_log2 = legs.iter().map(|&l| metadata.log2_dim(l)).sum();
-                        let read_write_log2 =
-                            logaddexp2(logaddexp2(e1.read_log2, e2.read_log2), result_log2);
-                        let step_score_log2 =
-                            objective.score_terms_log2(step_log2, read_write_log2);
-                        let total = logaddexp2(logaddexp2(e1.cost, e2.cost), step_score_log2);
+                        let result_size = C::size(&legs, metadata);
+                        let read_write = C::add(C::add(e1.read_size, e2.read_size), result_size);
+                        let total = C::component_total::<TRACK_FLOPS, TRACK_READ_WRITE>(
+                            e1.cost, e2.cost, step_flops, read_write, objective,
+                        )?;
                         if table.get(&m).is_some_and(|prev| prev.cost <= total) {
                             continue;
                         }
-                        (total, legs, result_log2)
+                        (total, legs, result_size)
                     };
                     let adj = (table[&m1].adj | table[&m2].adj) & !m & full;
                     let existed = table
@@ -576,7 +603,7 @@ fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                                 legs: result_legs,
                                 adj,
                                 left: m1,
-                                read_log2: result_log2,
+                                read_size: result_size,
                             },
                         )
                         .is_some();
@@ -594,9 +621,9 @@ fn dp_component<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         .clone();
 
     // Reconstruct the best split tree in postorder.
-    fn emit(
+    fn emit<V>(
         mask: u64,
-        table: &FastMap<u64, Entry>,
+        table: &FastMap<u64, Entry<V>>,
         members: &[usize],
         path: &mut SsaPath,
         n_inputs: usize,
@@ -829,5 +856,121 @@ mod tests {
             (plan.log2_flops * std::f64::consts::LOG10_2).to_bits(),
             stats.log10_flops.to_bits()
         );
+    }
+
+    /// Independent exact replay: input axes count duplicates, contraction legs do not.
+    fn binary_totals(
+        net: &TensorNetwork,
+        path: &SsaPath,
+        allow_outer_products: bool,
+    ) -> Option<(u128, u128)> {
+        use std::collections::{BTreeMap, BTreeSet};
+        let mut alive: BTreeMap<usize, (BTreeSet<LegId>, u128)> = net
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(id, axes)| (id, (axes.iter().copied().collect(), 1u128 << axes.len())))
+            .collect();
+        let output: BTreeSet<_> = net.output.iter().copied().collect();
+        let (mut flops, mut read_write) = (0, 0);
+        for (step, &(a, b)) in path.iter().enumerate() {
+            let (left, left_size) = alive.remove(&a)?;
+            let (right, right_size) = alive.remove(&b)?;
+            if !allow_outer_products && left.is_disjoint(&right) {
+                return None;
+            }
+            let union: BTreeSet<_> = left.union(&right).copied().collect();
+            flops += 1u128 << union.len();
+            let result: BTreeSet<_> = union
+                .into_iter()
+                .filter(|leg| {
+                    output.contains(leg) || alive.values().any(|(legs, _)| legs.contains(leg))
+                })
+                .collect();
+            let size = 1u128 << result.len();
+            read_write += left_size + right_size + size;
+            alive.insert(net.n_tensors() + step, (result, size));
+        }
+        assert_eq!(alive.len(), 1);
+        assert_eq!(alive.values().next().unwrap().0, output);
+        Some((flops, read_write))
+    }
+
+    #[test]
+    fn binary_objectives_match_independent_exhaustive_search() {
+        let cases = [
+            // A shared output hyperedge must survive every merge.
+            (
+                vec![vec![0, 1], vec![0, 2], vec![0, 3], vec![0, 4]],
+                vec![0, 1, 4],
+                false,
+            ),
+            // Repeated input axes and a scalar result.
+            (
+                vec![vec![0, 0, 1], vec![1, 2], vec![2, 3], vec![3]],
+                vec![],
+                false,
+            ),
+            // Disconnected single-leaf roots, including a repeated input axis.
+            (
+                vec![vec![0, 0, 1], vec![2], vec![], vec![3]],
+                vec![1, 2, 3],
+                true,
+            ),
+        ];
+        for (inputs, output, allow_outer) in cases {
+            let net = TensorNetwork {
+                name: "binary-exhaustive".into(),
+                size_dict: inputs.iter().flatten().map(|&leg| (leg, 2)).collect(),
+                inputs,
+                output,
+            };
+            for (wf, wr) in [(1u128, 0u128), (0, 1), (1, 64)] {
+                let objective = PlannerObjective::new(wf as f64, wr as f64).unwrap();
+                assert!(BinaryCosts::supports(&net, objective));
+                let expected = all_binary_paths(net.n_tensors())
+                    .iter()
+                    .filter_map(|path| binary_totals(&net, path, allow_outer))
+                    .map(|(f, r)| wf * f + wr * r)
+                    .min()
+                    .unwrap();
+                let (path, _) = optimal_dp_with_objective(&net, 4, objective).unwrap();
+                let (f, r) = binary_totals(&net, &path, allow_outer).unwrap();
+                assert_eq!(wf * f + wr * r, expected, "objective={objective:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn binary_dispatch_preserves_single_inputs_and_deadlines() {
+        let net = TensorNetwork {
+            name: "single-binary-input".into(),
+            inputs: vec![vec![0]],
+            output: vec![0],
+            size_dict: [(0, 2)].into_iter().collect(),
+        };
+        let (path, _) = optimal_dp(&net, 1).unwrap();
+        assert!(path.is_empty());
+        assert!(optimal_dp_until(&net, 1, Some(Instant::now())).is_err());
+        assert!(optimal_dp(&net, 0).is_err());
+    }
+
+    #[test]
+    fn unsupported_binary_weights_retain_the_original_path() {
+        let net = TensorNetwork {
+            name: "custom-binary-objective".into(),
+            inputs: vec![vec![0, 1], vec![0, 2], vec![1, 3], vec![2, 4]],
+            output: vec![3, 4],
+            size_dict: (0..5).map(|leg| (leg, 2)).collect(),
+        };
+        for objective in [
+            PlannerObjective::new(3.0, 7.0).unwrap(),
+            PlannerObjective::new(0.25, 0.75).unwrap(),
+        ] {
+            let expected =
+                optimal_dp_path_impl::<LogCosts, true, true>(&net, None, objective).unwrap();
+            let (actual, _) = optimal_dp_with_objective(&net, 4, objective).unwrap();
+            assert_eq!(actual, expected);
+        }
     }
 }
