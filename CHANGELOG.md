@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add independent, opt-in `integer-order-dp` and `integer-tree-cost` Cargo features
+  for fixed-leaf-order DP and contraction-tree cost calculations, including local
+  subtree replacement comparisons and cost-cache updates. Both are disabled by
+  default and use checked `u128` costs for dimension-two networks with supported
+  objectives. Unsupported or unrepresentable cases retain the previous arithmetic.
+  The fixed-order DP can skip overflowing candidates if a complete solution fits;
+  tree search falls back and evaluates the same candidate with the previous arithmetic.
+- These experimental features preserve the mathematical acceptance-probability
+  definitions, but exact comparisons and rounding can change decisions, random-number
+  consumption, and search trajectories. Existing comparisons include both better
+  and worse final objective values; enabling them does not guarantee better paths.
+  Python source builds expose matching Cargo features; a separately built Light/Heavy
+  engine must select its own features independently.
 - Use exact `u128` costs in subset dynamic programming, including local subtree
   reconfiguration, when every index has dimension two and a conservative bound
   proves that all candidate costs fit. Supported objectives are total FLOPs,

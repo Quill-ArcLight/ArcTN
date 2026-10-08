@@ -7,12 +7,18 @@
 //! leg weight of a split to be queried in `O(1)`. Adjacent pairs cross any
 //! boundary uniquely, including legs with more than two holders.
 //!
-//! Scores accumulate in log2 space where required. Complexity is `O(n^3)` time
-//! and `O(n^2)` memory.
+//! With the opt-in `integer-order-dp` feature, binary dimensions use checked
+//! integer costs for supported objectives when a complete cost fits u128.
+//! Default builds and unsupported cases retain the original arithmetic.
+//! Complexity is `O(n^3)` time and `O(n^2)` memory.
+
+mod cost;
+
+use cost::{BinaryCosts, IntervalCosts, LogCosts};
 
 use crate::network::TensorNetwork;
 use crate::objective::{ObjectiveKind, PlannerObjective};
-use crate::path::{logaddexp2, simulate_path, sorted_dedup, PathStats, SsaPath};
+use crate::path::{simulate_path, sorted_dedup, PathStats, SsaPath};
 use crate::tree::CTreeCore;
 use std::time::Instant;
 
@@ -186,6 +192,26 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     deadline: Option<Instant>,
     objective: PlannerObjective,
 ) -> Result<(SsaPath, PathStats), OrderDpError> {
+    if cfg!(feature = "integer-order-dp") && crate::integer_cost::supports(net, objective) {
+        if let Some(result) = order_dp_arithmetic::<BinaryCosts, TRACK_FLOPS, TRACK_READ_WRITE>(
+            net, order, deadline, objective,
+        )? {
+            return Ok(result);
+        }
+        // A large intermediate/candidate is not itself a failure. Only retry
+        // when every complete fixed-order tree exceeds the integer range.
+        // Pass the original deadline so a retry never receives extra time.
+    }
+    order_dp_arithmetic::<LogCosts, TRACK_FLOPS, TRACK_READ_WRITE>(net, order, deadline, objective)?
+        .ok_or_else(|| "pure-FLOPs linear f64 overflow in leaf-order DP".into())
+}
+
+fn order_dp_arithmetic<C: IntervalCosts, const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
+    net: &TensorNetwork,
+    order: &[usize],
+    deadline: Option<Instant>,
+    objective: PlannerObjective,
+) -> Result<Option<(SsaPath, PathStats)>, OrderDpError> {
     if deadline_reached(deadline) {
         return Err(OrderDpError::Deadline);
     }
@@ -201,7 +227,7 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         return Err(format!("order 长度 {} ≠ 张量数 {n}", order.len()).into());
     }
     if n <= 1 {
-        return Ok((SsaPath::new(), simulate_path(net, &SsaPath::new())?));
+        return Ok(Some((SsaPath::new(), simulate_path(net, &SsaPath::new())?)));
     }
     {
         let mut seen = vec![false; n];
@@ -235,13 +261,13 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     let table_len = n
         .checked_mul(n)
         .ok_or_else(|| "order-dp 的 n² DP 表长度溢出 usize".to_string())?;
-    let mut pref = vec![0f64; pref_len];
+    let mut pref = vec![C::ZERO_EXPONENT; pref_len];
     // Sort legs for deterministic floating-point accumulation.
     let mut occ_legs: Vec<u32> = occ.keys().copied().collect();
     occ_legs.sort_unstable();
     for l in occ_legs {
         let ps = &occ[&l];
-        let w = net.log2_dim(l);
+        let w = C::dimension(net, l);
         for t in 0..ps.len().saturating_sub(1) {
             let (a, b) = (ps[t], ps[t + 1]);
             pref[(a + 1) * np1 + (b + 1)] += w;
@@ -252,12 +278,13 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
             return Err(OrderDpError::Deadline);
         }
         for j in 1..np1 {
-            pref[i * np1 + j] +=
+            let neighbors =
                 pref[(i - 1) * np1 + j] + pref[i * np1 + (j - 1)] - pref[(i - 1) * np1 + (j - 1)];
+            pref[i * np1 + j] += neighbors;
         }
     }
     // Sum points with lo in [i, k] and hi in [k + 1, j].
-    let rect = |i: usize, k: usize, j: usize| -> f64 {
+    let rect = |i: usize, k: usize, j: usize| -> C::Exponent {
         let (r1, r2, c1, c2) = (i, k + 1, k + 1, j + 1); // Half-open rectangle.
         pref[r2 * np1 + c2] - pref[r1 * np1 + c2] - pref[r2 * np1 + c1] + pref[r1 * np1 + c1]
     };
@@ -265,17 +292,17 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     // Build logS(i, j) incrementally for each fixed i.
     let total_cnt: std::collections::HashMap<u32, usize> =
         occ.iter().map(|(&l, ps)| (l, ps.len())).collect();
-    let mut log_s = vec![0f64; table_len];
+    let mut log_s = vec![C::ZERO_EXPONENT; table_len];
     for i in 0..n {
         if deadline_reached(deadline) {
             return Err(OrderDpError::Deadline);
         }
         let mut cnt: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
-        let mut acc = 0f64;
+        let mut acc = C::ZERO_EXPONENT;
         for j in i..n {
             for l in sorted_dedup(&net.inputs[order[j]]) {
                 let c = cnt.entry(l).or_insert(0);
-                let w = net.log2_dim(l);
+                let w = C::dimension(net, l);
                 let tot = total_cnt[&l];
                 let was_kept = *c > 0 && (*c < tot || in_output.contains(&l));
                 *c += 1;
@@ -292,7 +319,7 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         // Leaves retain all logical legs for the first contraction cost.
         log_s[i * n + i] = sorted_dedup(&net.inputs[order[i]])
             .iter()
-            .map(|&l| net.log2_dim(l))
+            .map(|&l| C::dimension(net, l))
             .sum();
     }
     let leaf_read_log2 = if TRACK_READ_WRITE {
@@ -301,8 +328,8 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
             .map(|&tensor| {
                 net.inputs[tensor]
                     .iter()
-                    .map(|&leg| net.log2_dim(leg))
-                    .sum::<f64>()
+                    .map(|&leg| C::dimension(net, leg))
+                    .sum::<C::Exponent>()
             })
             .collect::<Vec<_>>()
     } else {
@@ -311,25 +338,21 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
 
     // Entries of one interval length read only shorter intervals and are parallel-safe.
     use rayon::prelude::*;
-    let leaf_cost = if TRACK_FLOPS && !TRACK_READ_WRITE {
-        0.0
-    } else {
-        f64::NEG_INFINITY
-    };
+    let leaf_cost = C::leaf_cost::<TRACK_FLOPS, TRACK_READ_WRITE>();
     let mut cost = vec![leaf_cost; table_len];
     let mut split = vec![0u32; table_len];
     for len in 2..=n {
         if deadline_reached(deadline) {
             return Err(OrderDpError::Deadline);
         }
-        let level: Vec<(usize, f64, u32)> = (0..=(n - len))
+        let level: Vec<(usize, C::Cost, u32)> = (0..=(n - len))
             .into_par_iter()
-            .map(|i| -> Result<(usize, f64, u32), OrderDpError> {
+            .map(|i| -> Result<(usize, C::Cost, u32), OrderDpError> {
                 if deadline_reached(deadline) {
                     return Err(OrderDpError::Deadline);
                 }
                 let j = i + len - 1;
-                let (mut best, mut bk) = (f64::INFINITY, i);
+                let (mut best, mut bk) = (C::unreachable(), i);
                 for k in i..j {
                     if k % 64 == 0 && deadline_reached(deadline) {
                         return Err(OrderDpError::Deadline);
@@ -337,9 +360,9 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                     let step_log2 = if TRACK_FLOPS {
                         log_s[i * n + k] + log_s[(k + 1) * n + j] - rect(i, k, j)
                     } else {
-                        f64::NEG_INFINITY
+                        C::ZERO_EXPONENT
                     };
-                    let read_write_log2 = if TRACK_READ_WRITE {
+                    let (left_read, right_read) = if TRACK_READ_WRITE {
                         let left_read_log2 = if i == k {
                             leaf_read_log2[i]
                         } else {
@@ -350,33 +373,20 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                         } else {
                             log_s[(k + 1) * n + j]
                         };
-                        logaddexp2(
-                            logaddexp2(left_read_log2, right_read_log2),
-                            log_s[i * n + j],
-                        )
+                        (left_read_log2, right_read_log2)
                     } else {
-                        f64::NEG_INFINITY
+                        (C::ZERO_EXPONENT, C::ZERO_EXPONENT)
                     };
-                    let tot = if TRACK_FLOPS && !TRACK_READ_WRITE {
-                        let step = step_log2.exp2();
-                        let total = cost[i * n + k] + cost[(k + 1) * n + j] + step;
-                        if step.is_nan() || total.is_nan() {
-                            return Err("pure-FLOPs non-finite cost in leaf-order DP".into());
-                        }
-                        if step.is_infinite() || total.is_infinite() {
-                            // An overflowing non-negative cost cannot beat a finite split.
-                            continue;
-                        }
-                        total
-                    } else {
-                        let step_score_log2 =
-                            objective.score_terms_log2(step_log2, read_write_log2);
-                        logaddexp2(
-                            logaddexp2(cost[i * n + k], cost[(k + 1) * n + j]),
-                            step_score_log2,
-                        )
-                    };
-                    if tot < best {
+                    let tot = C::candidate::<TRACK_FLOPS, TRACK_READ_WRITE>(
+                        cost[i * n + k],
+                        cost[(k + 1) * n + j],
+                        step_log2,
+                        left_read,
+                        right_read,
+                        log_s[i * n + j],
+                        objective,
+                    )?;
+                    if C::better(tot, best) {
                         best = tot;
                         bk = k;
                     }
@@ -391,8 +401,8 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         }
     }
 
-    if TRACK_FLOPS && !TRACK_READ_WRITE && !cost[n - 1].is_finite() {
-        return Err("pure-FLOPs linear f64 overflow in leaf-order DP".into());
+    if !C::complete::<TRACK_FLOPS, TRACK_READ_WRITE>(cost[n - 1]) {
+        return Ok(None);
     }
 
     // Reconstruct iteratively to avoid recursion on unbalanced trees.
@@ -424,7 +434,7 @@ fn order_dp_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         return Err(OrderDpError::Deadline);
     }
     let stats = simulate_path(net, &path)?;
-    Ok((path, stats))
+    Ok(Some((path, stats)))
 }
 
 #[inline]
@@ -435,8 +445,8 @@ fn deadline_reached(deadline: Option<Instant>) -> bool {
 #[cfg(test)]
 mod objective_tests {
     use super::{
-        leaf_order_of_path, leaf_order_of_path_with_objective, order_dp,
-        order_dp_cooperative_with_objective, order_dp_with_objective,
+        leaf_order_of_path, leaf_order_of_path_with_objective, order_dp, order_dp_arithmetic,
+        order_dp_cooperative_with_objective, order_dp_with_objective, BinaryCosts, LogCosts,
     };
     use crate::network::TensorNetwork;
     use crate::objective::PlannerObjective;
@@ -450,6 +460,298 @@ mod objective_tests {
             vec![(1, 2), (3, 4), (0, 5)],
             vec![(2, 3), (1, 4), (0, 5)],
         ]
+    }
+
+    /// Enumerate ordered binary trees independently of the interval DP tables.
+    fn all_ordered_paths(order: &[usize]) -> Vec<SsaPath> {
+        #[derive(Clone)]
+        enum Tree {
+            Leaf(usize),
+            Pair(Box<Tree>, Box<Tree>),
+        }
+        fn trees(order: &[usize]) -> Vec<Tree> {
+            if order.len() == 1 {
+                return vec![Tree::Leaf(order[0])];
+            }
+            let mut out = Vec::new();
+            for k in 1..order.len() {
+                for left in trees(&order[..k]) {
+                    for right in trees(&order[k..]) {
+                        out.push(Tree::Pair(Box::new(left.clone()), Box::new(right)));
+                    }
+                }
+            }
+            out
+        }
+        fn emit(tree: &Tree, n: usize, path: &mut SsaPath) -> usize {
+            match tree {
+                Tree::Leaf(id) => *id,
+                Tree::Pair(left, right) => {
+                    let a = emit(left, n, path);
+                    let b = emit(right, n, path);
+                    let id = n + path.len();
+                    path.push((a.min(b), a.max(b)));
+                    id
+                }
+            }
+        }
+        trees(order)
+            .iter()
+            .map(|tree| {
+                let mut path = Vec::new();
+                emit(tree, order.len(), &mut path);
+                path
+            })
+            .collect()
+    }
+
+    /// Exact replay uses sets and active holders, not the DP's prefix tables.
+    fn exact_binary_score(net: &TensorNetwork, path: &SsaPath, wf: u128, wr: u128) -> Option<u128> {
+        use std::collections::{BTreeMap, BTreeSet};
+        let mut alive: BTreeMap<_, _> = net
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(i, axes)| {
+                (
+                    i,
+                    (
+                        axes.iter().copied().collect::<BTreeSet<_>>(),
+                        1u128 << axes.len(),
+                    ),
+                )
+            })
+            .collect();
+        let mut total = 0u128;
+        for (step, &(a, b)) in path.iter().enumerate() {
+            let (left, left_size) = alive.remove(&a)?;
+            let (right, right_size) = alive.remove(&b)?;
+            let union: BTreeSet<_> = left.union(&right).copied().collect();
+            let result: BTreeSet<_> = union
+                .iter()
+                .copied()
+                .filter(|leg| {
+                    net.output.contains(leg) || alive.values().any(|(legs, _)| legs.contains(leg))
+                })
+                .collect();
+            let result_size = 1u128.checked_shl(result.len().try_into().ok()?)?;
+            let flops = if wf == 0 {
+                0
+            } else {
+                1u128
+                    .checked_shl(union.len().try_into().ok()?)?
+                    .checked_mul(wf)?
+            };
+            let read_write = if wr == 0 {
+                0
+            } else {
+                left_size
+                    .checked_add(right_size)?
+                    .checked_add(result_size)?
+                    .checked_mul(wr)?
+            };
+            total = total.checked_add(flops)?.checked_add(read_write)?;
+            alive.insert(net.n_tensors() + step, (result, result_size));
+        }
+        assert_eq!(alive.len(), 1);
+        assert_eq!(
+            alive.values().next().unwrap().0,
+            net.output.iter().copied().collect()
+        );
+        Some(total)
+    }
+
+    fn binary_graph(n: usize, edges: &[(usize, usize)], multiplicity: usize) -> TensorNetwork {
+        let mut inputs = vec![Vec::new(); n];
+        let mut size_dict = std::collections::HashMap::new();
+        for &(a, b) in edges {
+            for _ in 0..multiplicity {
+                let leg = size_dict.len() as u32;
+                inputs[a].push(leg);
+                inputs[b].push(leg);
+                size_dict.insert(leg, 2);
+            }
+        }
+        TensorNetwork {
+            name: "binary-order-graph".into(),
+            inputs,
+            output: vec![],
+            size_dict,
+        }
+    }
+
+    #[test]
+    fn binary_order_objectives_match_independent_exhaustive_search() {
+        let cases = [
+            // A shared output hyperedge remains after a merge.
+            (
+                vec![vec![0, 1], vec![0, 2], vec![0, 3], vec![0, 4]],
+                vec![0, 1, 4],
+            ),
+            // Raw input reads preserve repeated axes; the result is a scalar.
+            (vec![vec![0, 0, 1], vec![1, 2], vec![2, 3], vec![3]], vec![]),
+            // Outer products, a scalar input, and a repeated axis.
+            (vec![vec![0, 0, 1], vec![2], vec![], vec![3]], vec![1, 2, 3]),
+        ];
+        for (inputs, output) in cases {
+            let net = TensorNetwork {
+                name: "binary-order-exhaustive".into(),
+                size_dict: inputs.iter().flatten().map(|&leg| (leg, 2)).collect(),
+                inputs,
+                output,
+            };
+            for order in [[0, 1, 2, 3], [2, 0, 3, 1]] {
+                for (wf, wr) in [(1, 0), (0, 1), (1, 64)] {
+                    let objective = PlannerObjective::new(wf as f64, wr as f64).unwrap();
+                    let expected = all_ordered_paths(&order)
+                        .iter()
+                        .filter_map(|path| exact_binary_score(&net, path, wf, wr))
+                        .min()
+                        .unwrap();
+                    let (path, _) = order_dp_with_objective(&net, &order, objective).unwrap();
+                    assert_eq!(exact_binary_score(&net, &path, wf, wr), Some(expected));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn binary_order_skips_overflowing_candidates_and_intervals() {
+        // Input ranks are 62, but some outer-product intervals are much larger.
+        let net = binary_graph(5, &[(0, 1), (1, 2), (2, 3), (3, 4), (4, 0)], 31);
+        net.validate().unwrap();
+        let order = [0, 2, 1, 4, 3];
+        assert!(net.size_dict.len() > 128);
+        for (wf, wr) in [(1, 0), (0, 1), (1, 64)] {
+            let objective = PlannerObjective::new(wf as f64, wr as f64).unwrap();
+            let scores: Vec<_> = all_ordered_paths(&order)
+                .iter()
+                .map(|path| exact_binary_score(&net, path, wf, wr))
+                .collect();
+            if wf != 0 {
+                assert!(
+                    scores.iter().any(Option::is_none),
+                    "objective={objective:?}"
+                );
+            }
+            let expected = scores.into_iter().flatten().min().unwrap();
+            let integer = match (wf, wr) {
+                (1, 0) => {
+                    order_dp_arithmetic::<BinaryCosts, true, false>(&net, &order, None, objective)
+                }
+                (0, 1) => {
+                    order_dp_arithmetic::<BinaryCosts, false, true>(&net, &order, None, objective)
+                }
+                _ => order_dp_arithmetic::<BinaryCosts, true, true>(&net, &order, None, objective),
+            };
+            let (path, _) = integer
+                .unwrap()
+                .expect("representable complete tree must survive");
+            assert_eq!(exact_binary_score(&net, &path, wf, wr), Some(expected));
+            #[cfg(feature = "integer-order-dp")]
+            {
+                let (dispatched, _) = order_dp_with_objective(&net, &order, objective).unwrap();
+                assert_eq!(dispatched, path);
+            }
+        }
+    }
+
+    #[test]
+    fn binary_order_complete_overflow_falls_back_without_changing_deadline_errors() {
+        // Every internal merge above a leaf pair involves at least 132 indices.
+        // All input ranks are 60, so the network itself remains valid.
+        let edges: Vec<_> = (0..6)
+            .flat_map(|a| (a + 1..6).map(move |b| (a, b)))
+            .collect();
+        let net = binary_graph(6, &edges, 12);
+        net.validate().unwrap();
+        let order = [0, 1, 2, 3, 4, 5];
+        let objective = PlannerObjective::new(1.0, 0.0).unwrap();
+        assert!(
+            order_dp_arithmetic::<BinaryCosts, true, false>(&net, &order, None, objective)
+                .unwrap()
+                .is_none()
+        );
+        let expected = order_dp_arithmetic::<LogCosts, true, false>(&net, &order, None, objective)
+            .unwrap()
+            .unwrap();
+        let actual = order_dp_with_objective(&net, &order, objective).unwrap();
+        assert_eq!(actual.0, expected.0);
+        assert_eq!(
+            actual.1.log10_flops.to_bits(),
+            expected.1.log10_flops.to_bits()
+        );
+        let expired = std::time::Instant::now() - std::time::Duration::from_millis(1);
+        assert!(
+            order_dp_cooperative_with_objective(&net, &order, Some(expired), objective)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "integer-order-dp"))]
+    fn disabled_integer_order_feature_uses_original_arithmetic() {
+        let mut net = open_hyperedge_net();
+        net.size_dict.values_mut().for_each(|dim| *dim = 2);
+        let order = [2, 0, 3, 1];
+        for objective in [
+            PlannerObjective::new(1.0, 0.0).unwrap(),
+            PlannerObjective::new(0.0, 1.0).unwrap(),
+            PlannerObjective::FIXED,
+        ] {
+            assert!(crate::integer_cost::supports(&net, objective));
+            let expected = match objective.kind() {
+                crate::objective::ObjectiveKind::TotalFlops => {
+                    order_dp_arithmetic::<LogCosts, true, false>(&net, &order, None, objective)
+                }
+                crate::objective::ObjectiveKind::TotalReadWrite => {
+                    order_dp_arithmetic::<LogCosts, false, true>(&net, &order, None, objective)
+                }
+                crate::objective::ObjectiveKind::Weighted => {
+                    order_dp_arithmetic::<LogCosts, true, true>(&net, &order, None, objective)
+                }
+            }
+            .unwrap()
+            .unwrap();
+            let actual = order_dp_with_objective(&net, &order, objective).unwrap();
+            assert_eq!(actual.0, expected.0);
+            assert_eq!(
+                actual.1.log10_flops.to_bits(),
+                expected.1.log10_flops.to_bits()
+            );
+            assert_eq!(
+                actual.1.log2_read_write.to_bits(),
+                expected.1.log2_read_write.to_bits()
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_order_inputs_keep_the_original_arithmetic() {
+        let mut binary = open_hyperedge_net();
+        binary.size_dict.values_mut().for_each(|dim| *dim = 2);
+        let order = [2, 0, 3, 1];
+        for (net, objective) in [
+            (open_hyperedge_net(), PlannerObjective::FIXED),
+            (binary, PlannerObjective::new(3.0, 7.0).unwrap()),
+        ] {
+            assert!(!crate::integer_cost::supports(&net, objective));
+            let expected =
+                order_dp_arithmetic::<LogCosts, true, true>(&net, &order, None, objective)
+                    .unwrap()
+                    .unwrap();
+            let actual = order_dp_with_objective(&net, &order, objective).unwrap();
+            assert_eq!(actual.0, expected.0);
+            assert_eq!(
+                actual.1.log10_flops.to_bits(),
+                expected.1.log10_flops.to_bits()
+            );
+            assert_eq!(
+                actual.1.log2_read_write.to_bits(),
+                expected.1.log2_read_write.to_bits()
+            );
+        }
     }
 
     fn open_hyperedge_net() -> TensorNetwork {

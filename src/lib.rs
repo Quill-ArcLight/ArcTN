@@ -12,6 +12,7 @@ pub mod auto;
 pub mod compiled;
 pub mod contract;
 pub mod execution_plan;
+mod integer_cost;
 pub mod linalg;
 pub mod naive;
 pub mod network;

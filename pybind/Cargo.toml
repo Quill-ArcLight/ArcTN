@@ -25,6 +25,10 @@ numpy = "0.29"
 num-complex = "0.4"
 
 [features]
+# Optional integer cost arithmetic in the public standalone algorithms.
+# A separately built Light/Heavy engine selects its own features.
+integer-order-dp = ["arctn/integer-order-dp"]
+integer-tree-cost = ["arctn/integer-tree-cost"]
 # Optional benchmark/production build: enable matrixmultiply's inner-GEMM
 # thread tree in the ArcTN dependency. It is deliberately not a default
 # feature because sliced outer parallelism needs a separate oversubscription

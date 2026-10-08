@@ -49,6 +49,9 @@ libloading = "0.8"
 mpi = { version = "0.8", optional = true, features = ["complex"] }
 
 [features]
+# Experimental cost arithmetic; both are opt-in and independently selectable.
+integer-order-dp = []
+integer-tree-cost = []
 mpi = ["dep:mpi"]
 # Enable matrixmultiply's GEMM thread pool, capped at four threads.
 # MATMUL_NUM_THREADS controls its size. tnexec avoids nested pools for sliced execution.

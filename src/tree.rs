@@ -15,9 +15,18 @@ use crate::path::{
 };
 use crate::paths::optimal::optimal_dp_reconfiguration_core;
 
+mod integer;
+use integer::{IntegerRotation, IntegerTreeCosts};
+
 const NONE: usize = usize::MAX;
 
+#[cfg(feature = "integer-tree-cost")]
+pub const PURE_FLOPS_NUMERIC_MODE: &str = "checked-u128-with-linear-f64-fallback";
+#[cfg(not(feature = "integer-tree-cost"))]
 pub const PURE_FLOPS_NUMERIC_MODE: &str = "linear-f64-total-flops";
+#[cfg(feature = "integer-tree-cost")]
+pub const PURE_FLOPS_OVERFLOW_POLICY: &str = "fallback-to-linear-f64-then-reject-nonfinite";
+#[cfg(not(feature = "integer-tree-cost"))]
 pub const PURE_FLOPS_OVERFLOW_POLICY: &str = "reject-cell";
 
 #[inline]
@@ -161,6 +170,11 @@ pub struct CTreeCore<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool> {
     step_linear_cache: Vec<f64>,
     step_linear_total: f64,
     read_write_log2_sum: LogSumTree,
+    /// Exact active-objective costs, when every actual tree term fits u128.
+    integer_costs: Option<IntegerTreeCosts>,
+    /// Once any proposed state overflows, keep this tree on legacy arithmetic.
+    integer_enabled: bool,
+    binary_dimensions: bool,
 }
 
 /// Evidence from a production-style online stopping rule applied at complete
@@ -190,10 +204,13 @@ pub struct RotScratch {
 #[derive(Clone, Copy, Debug, Default)]
 struct ReconfigureNodeOutcome {
     applied: bool,
+    fell_back: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
 struct RotationCostChange {
+    integer: Option<IntegerRotation>,
+    fell_back: bool,
     next_flops_log2: f64,
     next_read_write_log2: f64,
     new_step_b_log2: f64,
@@ -202,6 +219,16 @@ struct RotationCostChange {
     new_step_v_linear: f64,
     next_flops_linear: f64,
     new_tensor_b_log2: f64,
+}
+
+impl RotationCostChange {
+    fn score_log2(self, objective: PlannerObjective) -> f64 {
+        if let Some(costs) = self.integer {
+            integer::score_log2(costs.score, objective)
+        } else {
+            objective.score_terms_log2(self.next_flops_log2, self.next_read_write_log2)
+        }
+    }
 }
 impl RotScratch {
     pub fn new() -> Self {
@@ -299,6 +326,11 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
             },
             step_linear_total: 0.0,
             read_write_log2_sum: LogSumTree::empty(),
+            integer_costs: None,
+            integer_enabled: cfg!(feature = "integer-tree-cost")
+                && crate::integer_cost::supports(net, objective),
+            binary_dimensions: cfg!(feature = "integer-tree-cost")
+                && net.size_dict.values().all(|&dim| dim == 2),
         };
         for (i, inp) in net.inputs.iter().enumerate() {
             t.legs.push(sorted_dedup(inp));
@@ -338,6 +370,9 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
 
     /// Sum log2 dimensions over the union of two sorted leg lists.
     fn union_log2(&self, x: &[LegId], y: &[LegId]) -> f64 {
+        if self.binary_dimensions {
+            return integer::union_len(x, y) as f64;
+        }
         let (mut i, mut j, mut s) = (0usize, 0usize, 0f64);
         while i < x.len() && j < y.len() {
             match x[i].cmp(&y[j]) {
@@ -382,6 +417,13 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
     /// use result legs, matching the accounting in `PathStats::log2_read_write`.
     #[inline]
     fn tensor_log2_size(&self, net: &TensorNetwork, v: usize) -> f64 {
+        if self.binary_dimensions {
+            return if self.is_leaf(v) {
+                net.inputs[v].len()
+            } else {
+                self.legs[v].len()
+            } as f64;
+        }
         if self.is_leaf(v) {
             net.inputs[v].iter().map(|&l| net.log2_dim(l)).sum()
         } else {
@@ -407,6 +449,13 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
             return self.step_log2_cost(net, v);
         }
         if TRACK_READ_WRITE {
+            if let Some(costs) = &self.integer_costs {
+                // This local read/write term is a subset of the checked total.
+                let local = costs.tensor_sizes[self.left[v]]
+                    + costs.tensor_sizes[self.right[v]]
+                    + costs.tensor_sizes[v];
+                return (local as f64).log2();
+            }
             logaddexp2(
                 logaddexp2(
                     self.tensor_log2_size(net, self.left[v]),
@@ -424,7 +473,141 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
         self.objective.score_terms_log2(flops_log2, read_write_log2)
     }
 
+    fn integer_score(&self) -> Option<u128> {
+        self.integer_costs.as_ref().map(|costs| costs.score)
+    }
+
+    fn search_score_log2(&self) -> f64 {
+        self.integer_score()
+            .map(|score| integer::score_log2(score, self.objective))
+            .unwrap_or_else(|| {
+                self.score_log2(self.search_flops_log2(), self.search_read_write_log2())
+            })
+    }
+
+    fn rotation_relative_change(
+        &self,
+        change: RotationCostChange,
+        fallback: impl FnOnce() -> f64,
+    ) -> f64 {
+        match (self.integer_score(), change.integer) {
+            (Some(current), Some(next)) => integer::relative_change(current, next.score),
+            _ => fallback(),
+        }
+    }
+
+    fn rotation_log_change(
+        &self,
+        change: RotationCostChange,
+        fallback: impl FnOnce() -> f64,
+    ) -> f64 {
+        match (self.integer_score(), change.integer) {
+            (Some(current), Some(next)) => (next.score as f64 / current as f64).log2(),
+            _ => fallback(),
+        }
+    }
+
+    fn rotation_ranking_score(&self, change: RotationCostChange) -> f64 {
+        if TRACK_FLOPS && !TRACK_READ_WRITE {
+            change.next_flops_linear
+        } else {
+            change.score_log2(self.objective)
+        }
+    }
+
+    fn accept_rotation_relative(
+        &self,
+        change: RotationCostChange,
+        temperature: f64,
+        rng: &mut impl rand::Rng,
+    ) -> bool {
+        if let (Some(current), Some(next)) = (self.integer_score(), change.integer) {
+            // Do not compute logs or draw a random number for non-worsening moves.
+            return next.score <= current
+                || rng.gen::<f64>()
+                    < (-integer::relative_change(current, next.score)
+                        / temperature.max(f64::MIN_POSITIVE))
+                    .exp();
+        }
+        let (current, next) = if TRACK_FLOPS && !TRACK_READ_WRITE {
+            (self.step_linear_total, change.next_flops_linear)
+        } else {
+            (self.search_score_log2(), change.score_log2(self.objective))
+        };
+        next <= current || {
+            let delta = self.rotation_relative_change(change, || {
+                if TRACK_FLOPS && !TRACK_READ_WRITE {
+                    (next - current) / current
+                } else {
+                    relative_change(current, next)
+                }
+            });
+            rng.gen::<f64>() < (-delta / temperature.max(f64::MIN_POSITIVE)).exp()
+        }
+    }
+
+    fn accept_rotation_log(
+        &self,
+        change: RotationCostChange,
+        beta: f64,
+        rng: &mut impl rand::Rng,
+    ) -> bool {
+        if let (Some(current), Some(next)) = (self.integer_score(), change.integer) {
+            return next.score <= current || {
+                let delta = self.rotation_log_change(change, || unreachable!("integer proposal"));
+                rng.gen::<f64>() < (-beta * delta).exp()
+            };
+        }
+        let (current, next) = if TRACK_FLOPS && !TRACK_READ_WRITE {
+            (self.step_linear_total, change.next_flops_linear)
+        } else {
+            (self.search_score_log2(), change.score_log2(self.objective))
+        };
+        next <= current || {
+            let delta = self.rotation_log_change(change, || {
+                if TRACK_FLOPS && !TRACK_READ_WRITE {
+                    (next / current).log2()
+                } else {
+                    next - current
+                }
+            });
+            rng.gen::<f64>() < (-beta * delta).exp()
+        }
+    }
+
+    fn improves_incumbent(
+        &self,
+        incumbent_integer: Option<u128>,
+        candidate: f64,
+        incumbent: f64,
+        minimum_gain: f64,
+    ) -> bool {
+        match (self.integer_score(), incumbent_integer) {
+            (Some(next), Some(current)) => integer::improves(next, current, minimum_gain),
+            _ => improves_ranking_by_relative::<TRACK_FLOPS, TRACK_READ_WRITE>(
+                candidate,
+                incumbent,
+                minimum_gain,
+            ),
+        }
+    }
+
     fn rebuild_cost_sums(&mut self, net: &TensorNetwork) -> Result<(), String> {
+        if self.integer_enabled {
+            if let Some(costs) = IntegerTreeCosts::build(self, net) {
+                if TRACK_FLOPS && !TRACK_READ_WRITE {
+                    self.step_linear_cache =
+                        costs.steps.iter().map(|&value| value as f64).collect();
+                    self.step_linear_total = costs.flops as f64;
+                }
+                self.integer_costs = Some(costs);
+                self.step_log2_sum = LogSumTree::empty();
+                self.read_write_log2_sum = LogSumTree::empty();
+                return Ok(());
+            }
+            self.integer_enabled = false;
+        }
+        self.integer_costs = None;
         if TRACK_FLOPS && !TRACK_READ_WRITE {
             self.step_linear_cache.resize(self.legs.len(), 0.0);
             let mut total = 0.0;
@@ -476,6 +659,12 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
     }
 
     fn refresh_linear_total(&mut self) -> Result<(), String> {
+        if let Some(costs) = &self.integer_costs {
+            if TRACK_FLOPS && !TRACK_READ_WRITE {
+                self.step_linear_total = costs.flops as f64;
+            }
+            return Ok(());
+        }
         if !TRACK_FLOPS || TRACK_READ_WRITE {
             return Ok(());
         }
@@ -595,40 +784,6 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
         if frontier.len() < 3 {
             return Ok(ReconfigureNodeOutcome::default());
         }
-        let cur_flops_linear = if TRACK_FLOPS && !TRACK_READ_WRITE {
-            let mut total = 0.0;
-            for &u in &internals {
-                total += self.step_linear_cache[u];
-                if !total.is_finite() {
-                    return Err("pure-FLOPs linear f64 overflow in local incumbent total".into());
-                }
-            }
-            total
-        } else {
-            0.0
-        };
-        let cur_flops_log2 = if TRACK_FLOPS && !TRACK_READ_WRITE {
-            cur_flops_linear.log2()
-        } else if TRACK_FLOPS {
-            internals.iter().fold(f64::NEG_INFINITY, |acc, &u| {
-                logaddexp2(acc, self.step_log2_cost(net, u))
-            })
-        } else {
-            f64::NEG_INFINITY
-        };
-        let cur_read_write_log2 = if TRACK_READ_WRITE {
-            let read_write = internals.iter().fold(f64::NEG_INFINITY, |acc, &u| {
-                [self.left[u], self.right[u], u]
-                    .into_iter()
-                    .fold(acc, |sum, node| {
-                        logaddexp2(sum, self.tensor_log2_size(net, node))
-                    })
-            });
-            read_write
-        } else {
-            f64::NEG_INFINITY
-        };
-
         // Treat frontier nodes as inputs and the root legs as output.
         let mut size_dict = HashMap::new();
         for &f in &frontier {
@@ -649,37 +804,114 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
         ) else {
             return Ok(ReconfigureNodeOutcome::default());
         };
+        self.reconfigure_candidate(net, v, frontier, internals, candidate)
+    }
+
+    fn reconfigure_candidate(
+        &mut self,
+        net: &TensorNetwork,
+        v: usize,
+        frontier: Vec<usize>,
+        internals: Vec<usize>,
+        candidate: crate::paths::optimal::ReconfigurationPlan,
+    ) -> Result<ReconfigureNodeOutcome, String> {
         let mini_path = candidate.path;
-        let mut mini_read_write_log2 = f64::NEG_INFINITY;
-        if TRACK_READ_WRITE {
-            mini_read_write_log2 = frontier.iter().fold(f64::NEG_INFINITY, |acc, &f| {
-                logaddexp2(acc, self.tensor_log2_size(net, f))
-            });
-            for (step, legs) in candidate.step_legs.iter().enumerate() {
-                let result_log2 = self.union_log2(legs, &[]);
-                mini_read_write_log2 = logaddexp2(mini_read_write_log2, result_log2);
-                if step + 1 != candidate.step_legs.len() {
+        let integer_scores = self.integer_costs.as_ref().and_then(|costs| {
+            costs.replacement_scores(
+                self,
+                &frontier,
+                &internals,
+                &mini_path,
+                &candidate.step_legs,
+                self.objective,
+            )
+        });
+        let mut fell_back = self.integer_costs.is_some() && integer_scores.is_none();
+        if fell_back {
+            // A local candidate outside the exact range still receives the
+            // complete legacy comparison; it is never skipped for this reason.
+            self.integer_enabled = false;
+            self.rebuild_cost_sums(net)?;
+        }
+        let (improved, cur_flops_linear) = if let Some((current, next)) = integer_scores {
+            let threshold = if TRACK_FLOPS && !TRACK_READ_WRITE {
+                1e-12
+            } else {
+                -(-1e-12 * std::f64::consts::LN_2).exp_m1()
+            };
+            (integer::improves(next, current, threshold), 0.0)
+        } else {
+            let cur_flops_linear = if TRACK_FLOPS && !TRACK_READ_WRITE {
+                let mut total = 0.0;
+                for &u in &internals {
+                    total += self.step_linear_cache[u];
+                    if !total.is_finite() {
+                        return Err(
+                            "pure-FLOPs linear f64 overflow in local incumbent total".into()
+                        );
+                    }
+                }
+                total
+            } else {
+                0.0
+            };
+            let cur_flops_log2 = if TRACK_FLOPS && !TRACK_READ_WRITE {
+                cur_flops_linear.log2()
+            } else if TRACK_FLOPS {
+                internals.iter().fold(f64::NEG_INFINITY, |acc, &u| {
+                    logaddexp2(acc, self.step_log2_cost(net, u))
+                })
+            } else {
+                f64::NEG_INFINITY
+            };
+            let cur_read_write_log2 = if TRACK_READ_WRITE {
+                let read_write = internals.iter().fold(f64::NEG_INFINITY, |acc, &u| {
+                    [self.left[u], self.right[u], u]
+                        .into_iter()
+                        .fold(acc, |sum, node| {
+                            logaddexp2(sum, self.tensor_log2_size(net, node))
+                        })
+                });
+                read_write
+            } else {
+                f64::NEG_INFINITY
+            };
+
+            let mut mini_read_write_log2 = f64::NEG_INFINITY;
+            if TRACK_READ_WRITE {
+                mini_read_write_log2 = frontier.iter().fold(f64::NEG_INFINITY, |acc, &f| {
+                    logaddexp2(acc, self.tensor_log2_size(net, f))
+                });
+                for (step, legs) in candidate.step_legs.iter().enumerate() {
+                    let result_log2 = self.union_log2(legs, &[]);
                     mini_read_write_log2 = logaddexp2(mini_read_write_log2, result_log2);
+                    if step + 1 != candidate.step_legs.len() {
+                        mini_read_write_log2 = logaddexp2(mini_read_write_log2, result_log2);
+                    }
                 }
             }
-        }
-        let improved = if TRACK_FLOPS && !TRACK_READ_WRITE {
-            let candidate_linear = checked_linear_flops(
-                path_stats_flops_roundtrip_log2(candidate.log2_flops),
-                "local reconfiguration candidate",
-            )?;
-            candidate_linear < cur_flops_linear * (1.0 - 1e-12)
-        } else {
-            self.score_log2(
-                path_stats_flops_roundtrip_log2(candidate.log2_flops),
-                mini_read_write_log2,
-            ) < self.score_log2(
-                path_stats_flops_roundtrip_log2(cur_flops_log2),
-                cur_read_write_log2,
-            ) - 1e-12
+            let improved = if TRACK_FLOPS && !TRACK_READ_WRITE {
+                let candidate_linear = checked_linear_flops(
+                    path_stats_flops_roundtrip_log2(candidate.log2_flops),
+                    "local reconfiguration candidate",
+                )?;
+                candidate_linear < cur_flops_linear * (1.0 - 1e-12)
+            } else {
+                self.score_log2(
+                    path_stats_flops_roundtrip_log2(candidate.log2_flops),
+                    mini_read_write_log2,
+                ) < self.score_log2(
+                    path_stats_flops_roundtrip_log2(cur_flops_log2),
+                    cur_read_write_log2,
+                ) - 1e-12
+            };
+            (improved, cur_flops_linear)
         };
         if !improved {
-            return Ok(ReconfigureNodeOutcome::default());
+            return Ok(ReconfigureNodeOutcome {
+                applied: false,
+                fell_back,
+            });
         }
 
         // Map the optimized local SSA path back into the global tree.
@@ -724,7 +956,22 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
                     self.union_log2(&self.legs[self.left[gid]], &self.legs[self.right[gid]]);
             }
         }
-        if TRACK_FLOPS && !TRACK_READ_WRITE {
+        if self.integer_enabled {
+            let mut costs = self.integer_costs.take().expect("enabled integer costs");
+            if costs.reconfigure(self, &internals, &map[k..]).is_some() {
+                if TRACK_FLOPS && !TRACK_READ_WRITE {
+                    for &node in &map[k..] {
+                        self.step_linear_cache[node] = costs.steps[node] as f64;
+                    }
+                    self.step_linear_total = costs.flops as f64;
+                }
+                self.integer_costs = Some(costs);
+            } else {
+                self.integer_enabled = false;
+                fell_back = true;
+                self.rebuild_cost_sums(net)?;
+            }
+        } else if TRACK_FLOPS && !TRACK_READ_WRITE {
             let mut replacement = 0.0;
             for &gid in &map[k..] {
                 let step = checked_linear_flops(
@@ -745,7 +992,10 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
         } else {
             self.rebuild_cost_sums(net)?;
         }
-        Ok(ReconfigureNodeOutcome { applied: true })
+        Ok(ReconfigureNodeOutcome {
+            applied: true,
+            fell_back,
+        })
     }
 
     /// Reconfigure the full tree in descending local-priority order.
@@ -936,6 +1186,11 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
 {
     /// Base-two logarithm of total tree FLOPs.
     pub fn total_cost_log2(&self, _net: &TensorNetwork) -> f64 {
+        if TRACK_FLOPS {
+            if let Some(costs) = &self.integer_costs {
+                return (costs.flops as f64).log2();
+            }
+        }
         if TRACK_FLOPS && !TRACK_READ_WRITE {
             self.step_linear_total.log2()
         } else if TRACK_FLOPS {
@@ -954,6 +1209,13 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
 
     #[inline]
     fn search_flops_log2(&self) -> f64 {
+        if let Some(costs) = &self.integer_costs {
+            return if TRACK_FLOPS {
+                (costs.flops as f64).log2()
+            } else {
+                f64::NEG_INFINITY
+            };
+        }
         if TRACK_FLOPS && !TRACK_READ_WRITE {
             self.step_linear_total.log2()
         } else {
@@ -963,6 +1225,13 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
 
     #[inline]
     fn search_read_write_log2(&self) -> f64 {
+        if let Some(costs) = &self.integer_costs {
+            return if TRACK_READ_WRITE {
+                (costs.read_write as f64).log2()
+            } else {
+                f64::NEG_INFINITY
+            };
+        }
         self.read_write_log2_sum.total()
     }
 
@@ -979,17 +1248,19 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
         }
     }
 
-    /// Evaluate a rotation without mutating the tree.
+    /// Evaluate a rotation; an integer overflow switches the complete cost cache
+    /// to legacy arithmetic and evaluates the same candidate there.
     ///
     /// For internal node `b`, parent `v`, sibling `a`, and children `(c, d)`:
     ///
     /// - `promote_left`: `v=(c, b')`, `b'=(a, d)`;
     /// - otherwise: `v=(d, b')`, `b'=(a, c)`.
     ///
-    /// The parent leaf set is unchanged. The returned replacement FLOPs and
-    /// read/write terms are base-two logarithms.
+    /// The parent leaf set is unchanged. Exact proposals retain integer totals;
+    /// only legacy proposals populate the floating log-total fields.
     fn rotate_delta(
-        &self,
+        &mut self,
+        net: &TensorNetwork,
         b: usize,
         promote_left: bool,
         sc: &mut RotScratch,
@@ -1043,6 +1314,33 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
                 j += 1;
             }
         }
+        let fell_back = self.integer_costs.is_some();
+        if let Some(costs) = &self.integer_costs {
+            if let Some(integer) = costs.rotation(self, b, a, promoted, kept, &sc.legs_b) {
+                return Ok(Some(RotationCostChange {
+                    integer: Some(integer),
+                    fell_back: false,
+                    next_flops_log2: f64::NEG_INFINITY,
+                    next_read_write_log2: f64::NEG_INFINITY,
+                    new_step_b_log2: if TRACK_FLOPS {
+                        integer.step_b.ilog2() as f64
+                    } else {
+                        f64::NEG_INFINITY
+                    },
+                    new_step_v_log2: if TRACK_FLOPS {
+                        integer.step_v.ilog2() as f64
+                    } else {
+                        f64::NEG_INFINITY
+                    },
+                    new_step_b_linear: integer.step_b as f64,
+                    new_step_v_linear: integer.step_v as f64,
+                    next_flops_linear: integer.flops as f64,
+                    new_tensor_b_log2: sc.legs_b.len() as f64,
+                }));
+            }
+            self.integer_enabled = false;
+            self.rebuild_cost_sums(net)?;
+        }
         let (new_step_b_log2, new_step_v_log2) = if TRACK_FLOPS {
             (
                 self.union_log2(&self.legs[a], &self.legs[kept]),
@@ -1070,6 +1368,8 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
                 (0.0, 0.0, 0.0)
             };
         Ok(Some(RotationCostChange {
+            integer: None,
+            fell_back,
             next_flops_log2: if TRACK_FLOPS && !TRACK_READ_WRITE {
                 f64::NEG_INFINITY
             } else if TRACK_FLOPS {
@@ -1122,6 +1422,30 @@ impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>
             &self.leafset[b].clone(),
         );
         // Commit the values computed by the pure rotation evaluator.
+        if let Some(integer) = change.integer {
+            let costs = self
+                .integer_costs
+                .as_mut()
+                .expect("integer rotation needs integer cache");
+            costs.steps[b] = integer.step_b;
+            costs.steps[v] = integer.step_v;
+            if TRACK_READ_WRITE {
+                costs.tensor_sizes[b] = integer.tensor_b;
+            }
+            costs.flops = integer.flops;
+            costs.read_write = integer.read_write;
+            costs.score = integer.score;
+            if TRACK_FLOPS {
+                self.step_log2_cache[b] = change.new_step_b_log2;
+                self.step_log2_cache[v] = change.new_step_v_log2;
+                if !TRACK_READ_WRITE {
+                    self.step_linear_cache[b] = change.new_step_b_linear;
+                    self.step_linear_cache[v] = change.new_step_v_linear;
+                    self.step_linear_total = change.next_flops_linear;
+                }
+            }
+            return;
+        }
         if TRACK_FLOPS && !TRACK_READ_WRITE {
             self.step_log2_cache[b] = change.new_step_b_log2;
             self.step_log2_cache[v] = change.new_step_v_log2;
@@ -1200,13 +1524,7 @@ fn anneal_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     use rand::SeedableRng;
     let mut tree =
         CTreeCore::<TRACK_FLOPS, TRACK_READ_WRITE>::from_path_with_objective(net, path, objective)?;
-    let mut flops_log2 = tree.search_flops_log2();
-    let mut flops_linear = if TRACK_FLOPS && !TRACK_READ_WRITE {
-        tree.step_linear_total
-    } else {
-        0.0
-    };
-    let mut read_write_log2 = tree.search_read_write_log2();
+
     let init_stats = crate::path::simulate_path(net, path)?;
     // Rotatable nodes are non-root internal nodes.
     let rotatable: Vec<usize> = (0..tree.legs.len())
@@ -1218,50 +1536,30 @@ fn anneal_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
     let mut sc = RotScratch::new();
     let mut best_total = if TRACK_FLOPS && !TRACK_READ_WRITE {
-        flops_linear
+        tree.step_linear_total
     } else {
-        objective.score_terms_log2(flops_log2, read_write_log2)
+        tree.search_score_log2()
     };
+    let mut best_integer = tree.integer_score();
     let mut best_path = path.clone();
     for it in 0..niters {
         let frac = it as f64 / niters.max(1) as f64;
         let t_rel = t0_rel * (t1_rel / t0_rel).powf(frac); // Geometric cooling.
         let b = rotatable[rng.gen_range(0..rotatable.len())];
         let promote_left = rng.gen_bool(0.5);
-        let Some(change) = tree.rotate_delta(b, promote_left, &mut sc)? else {
+        let Some(change) = tree.rotate_delta(net, b, promote_left, &mut sc)? else {
             continue;
         };
-        let next_flops_log2 = change.next_flops_log2;
-        let next_read_write_log2 = change.next_read_write_log2;
-        let (next_energy, accept) = if TRACK_FLOPS && !TRACK_READ_WRITE {
-            let next = change.next_flops_linear;
-            let relative_delta = (next - flops_linear) / flops_linear;
-            let accept = next <= flops_linear
-                || rng.gen::<f64>() < (-relative_delta / t_rel.max(f64::MIN_POSITIVE)).exp();
-            (next, accept)
-        } else {
-            let current = objective.score_terms_log2(flops_log2, read_write_log2);
-            let next = objective.score_terms_log2(next_flops_log2, next_read_write_log2);
-            let accept = next <= current || {
-                let relative_delta = relative_change(current, next);
-                rng.gen::<f64>() < (-relative_delta / t_rel.max(f64::MIN_POSITIVE)).exp()
-            };
-            (next, accept)
-        };
+
+        let accept = tree.accept_rotation_relative(change, t_rel, &mut rng);
         if accept {
+            let next_energy = tree.rotation_ranking_score(change);
             tree.rotate_apply(b, promote_left, change);
-            if TRACK_FLOPS && !TRACK_READ_WRITE {
-                flops_linear = next_energy;
-            } else {
-                flops_log2 = next_flops_log2;
-                read_write_log2 = next_read_write_log2;
-            }
             let energy = next_energy;
-            let improved = improves_ranking_by_relative::<TRACK_FLOPS, TRACK_READ_WRITE>(
-                energy, best_total, 1e-12,
-            );
+            let improved = tree.improves_incumbent(best_integer, energy, best_total, 1e-12);
             if improved {
                 best_total = energy;
+                best_integer = tree.integer_score();
                 best_path = tree.to_path();
             }
         }
@@ -1378,7 +1676,6 @@ fn fallback_init_index(init_evals: &[PathStats], objective: PlannerObjective) ->
 /// State for one tempering replica.
 struct Replica<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool> {
     tree: CTreeCore<TRACK_FLOPS, TRACK_READ_WRITE>,
-    flops_log2: f64,
     flops_linear: f64,
     score_log2: f64,
     rng: rand_chacha::ChaCha8Rng,
@@ -1386,9 +1683,8 @@ struct Replica<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool> {
     rotatable: Vec<usize>,
     /// Best score: linear for pure FLOPs, otherwise base-two logarithmic.
     best_total: f64,
+    best_integer: Option<u128>,
     best_path: SsaPath,
-    /// Incrementally maintained base-two read/write complexity.
-    read_write_log2: f64,
 }
 
 /// Work completed by a parallel-tempering call and the observed stop conditions.
@@ -1429,6 +1725,14 @@ struct SegmentProgress {
 }
 
 impl<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool> Replica<TRACK_FLOPS, TRACK_READ_WRITE> {
+    fn refresh_current_costs(&mut self) {
+        if TRACK_FLOPS && !TRACK_READ_WRITE {
+            self.flops_linear = self.tree.step_linear_total;
+        } else {
+            self.score_log2 = self.tree.search_score_log2();
+        }
+    }
+
     #[inline]
     fn ranking_score(&self) -> f64 {
         if TRACK_FLOPS && !TRACK_READ_WRITE {
@@ -1507,9 +1811,7 @@ fn temper_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                         rep.tree.refresh_linear_total()?;
                         rep.flops_linear = rep.tree.step_linear_total;
                     } else {
-                        rep.flops_log2 = rep.tree.search_flops_log2();
-                        rep.read_write_log2 = rep.tree.search_read_write_log2();
-                        rep.score_log2 = rep.tree.score_log2(rep.flops_log2, rep.read_write_log2);
+                        rep.score_log2 = rep.tree.search_score_log2();
                     }
                 }
                 Ok(progress)
@@ -1638,23 +1940,21 @@ fn run_segment<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
             progress.reconfiguration_attempts += 1;
             if let Some(v) = pick_cost_weighted(&rep.tree, net, &mut rep.rng) {
                 let outcome = rep.tree.reconfigure_node(net, v, reconf_size)?;
+                if outcome.applied || outcome.fell_back {
+                    rep.refresh_current_costs();
+                }
                 if outcome.applied {
-                    if TRACK_FLOPS && !TRACK_READ_WRITE {
-                        rep.flops_linear = rep.tree.step_linear_total;
-                    } else {
-                        rep.flops_log2 = rep.tree.search_flops_log2();
-                        rep.read_write_log2 = rep.tree.search_read_write_log2();
-                        rep.score_log2 = rep.tree.score_log2(rep.flops_log2, rep.read_write_log2);
-                    }
                     rep.rotatable = rotatable_nodes(&rep.tree);
                     let energy = rep.ranking_score();
-                    let improved = improves_ranking_by_relative::<TRACK_FLOPS, TRACK_READ_WRITE>(
+                    let improved = rep.tree.improves_incumbent(
+                        rep.best_integer,
                         energy,
                         rep.best_total,
                         1e-12,
                     );
                     if improved {
                         rep.best_total = energy;
+                        rep.best_integer = rep.tree.integer_score();
                         rep.best_path = rep.tree.to_path();
                     }
                 }
@@ -1668,43 +1968,30 @@ fn run_segment<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
         }
         let b = rep.rotatable[rep.rng.gen_range(0..rep.rotatable.len())];
         let promote_left = rep.rng.gen_bool(0.5);
-        let Some(change) = rep.tree.rotate_delta(b, promote_left, &mut sc)? else {
+        let Some(change) = rep.tree.rotate_delta(net, b, promote_left, &mut sc)? else {
             continue;
         };
-        let next_flops_log2 = change.next_flops_log2;
-        let next_read_write_log2 = change.next_read_write_log2;
-        let (e_new, accept) = if TRACK_FLOPS && !TRACK_READ_WRITE {
-            let next = change.next_flops_linear;
-            let relative_delta = (next - rep.flops_linear) / rep.flops_linear;
-            let accept = next <= rep.flops_linear
-                || rep.rng.gen::<f64>() < (-relative_delta / t_rel.max(f64::MIN_POSITIVE)).exp();
-            (next, accept)
-        } else {
-            let next = rep.tree.score_log2(next_flops_log2, next_read_write_log2);
-            let current = rep.ranking_score();
-            let accept = next <= current || {
-                let relative_delta = relative_change(current, next);
-                rep.rng.gen::<f64>() < (-relative_delta / t_rel.max(f64::MIN_POSITIVE)).exp()
-            };
-            (next, accept)
-        };
+        if change.fell_back {
+            rep.refresh_current_costs();
+        }
+        let accept = rep
+            .tree
+            .accept_rotation_relative(change, t_rel, &mut rep.rng);
         if accept {
+            let e_new = rep.tree.rotation_ranking_score(change);
             rep.tree.rotate_apply(b, promote_left, change);
             if TRACK_FLOPS && !TRACK_READ_WRITE {
                 rep.flops_linear = e_new;
             } else {
-                rep.flops_log2 = next_flops_log2;
-                rep.read_write_log2 = next_read_write_log2;
                 rep.score_log2 = e_new;
             }
             let energy = rep.ranking_score();
-            let improved = improves_ranking_by_relative::<TRACK_FLOPS, TRACK_READ_WRITE>(
-                energy,
-                rep.best_total,
-                1e-12,
-            );
+            let improved =
+                rep.tree
+                    .improves_incumbent(rep.best_integer, energy, rep.best_total, 1e-12);
             if improved {
                 rep.best_total = energy;
+                rep.best_integer = rep.tree.integer_score();
                 rep.best_path = rep.tree.to_path();
             }
         }
@@ -2221,9 +2508,8 @@ fn temper_paths_impl_traced_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
         .collect();
     let mut reps: Vec<Replica<TRACK_FLOPS, TRACK_READ_WRITE>> = (0..k)
         .map(|i| {
-            let (tree, flops_log2, rot, p) = &seeds_pool[i % seeds_pool.len()];
-            let read_write_log2 = tree.search_read_write_log2();
-            let score_log2 = objective.score_terms_log2(*flops_log2, read_write_log2);
+            let (tree, _flops_log2, rot, p) = &seeds_pool[i % seeds_pool.len()];
+            let score_log2 = tree.search_score_log2();
             let flops_linear = if TRACK_FLOPS && !TRACK_READ_WRITE {
                 tree.step_linear_total
             } else {
@@ -2231,18 +2517,17 @@ fn temper_paths_impl_traced_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE
             };
             Replica {
                 tree: tree.clone(),
-                flops_log2: *flops_log2,
                 flops_linear,
                 score_log2,
                 rng: rand_chacha::ChaCha8Rng::seed_from_u64(seed.wrapping_add(i as u64 * 7919)),
                 rotatable: rot.clone(),
+                best_integer: tree.integer_score(),
                 best_total: if TRACK_FLOPS && !TRACK_READ_WRITE {
                     flops_linear
                 } else {
                     score_log2
                 },
                 best_path: p.clone(),
-                read_write_log2,
             }
         })
         .collect();
@@ -2384,8 +2669,7 @@ fn treesa_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
     let init_stats = crate::path::simulate_path(net, path)?;
     let tree0 =
         CTreeCore::<TRACK_FLOPS, TRACK_READ_WRITE>::from_path_with_objective(net, path, objective)?;
-    let flops_log2_0 = tree0.search_flops_log2();
-    let read_write_log2_0 = tree0.search_read_write_log2();
+
     if rotatable_nodes(&tree0).is_empty() {
         return Ok((path.clone(), init_stats));
     }
@@ -2396,19 +2680,14 @@ fn treesa_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                 rand_chacha::ChaCha8Rng::seed_from_u64(seed.wrapping_add(c as u64 * 6151));
             let mut sc = RotScratch::new();
             let mut tree = tree0.clone();
-            let mut flops_log2 = flops_log2_0;
-            let mut flops_linear = if TRACK_FLOPS && !TRACK_READ_WRITE {
-                tree.step_linear_total
-            } else {
-                0.0
-            };
-            let mut read_write_log2 = read_write_log2_0;
+
             let mut rotatable = rotatable_nodes(&tree);
             let mut best_total = if TRACK_FLOPS && !TRACK_READ_WRITE {
-                flops_linear
+                tree.step_linear_total
             } else {
-                objective.score_terms_log2(flops_log2, read_write_log2)
+                tree.search_score_log2()
             };
+            let mut best_integer = tree.integer_score();
             let mut best_path = path.clone();
             let mut tries = 0usize;
             for bi in 0..beta_steps.max(1) {
@@ -2430,26 +2709,21 @@ fn treesa_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                         if reconf_interval > 0 && tries % reconf_interval == 0 {
                             if let Some(v) = pick_cost_weighted(&tree, net, &mut rng) {
                                 if tree.reconfigure_node(net, v, reconf_size)?.applied {
-                                    if TRACK_FLOPS && !TRACK_READ_WRITE {
-                                        flops_linear = tree.step_linear_total;
-                                    } else {
-                                        flops_log2 = tree.search_flops_log2();
-                                        read_write_log2 = tree.search_read_write_log2();
-                                    }
                                     rotatable = rotatable_nodes(&tree);
                                     let score = if TRACK_FLOPS && !TRACK_READ_WRITE {
-                                        flops_linear
+                                        tree.step_linear_total
                                     } else {
-                                        objective.score_terms_log2(flops_log2, read_write_log2)
+                                        tree.search_score_log2()
                                     };
-                                    let improved = improves_ranking_by_relative::<
-                                        TRACK_FLOPS,
-                                        TRACK_READ_WRITE,
-                                    >(
-                                        score, best_total, 1e-12
+                                    let improved = tree.improves_incumbent(
+                                        best_integer,
+                                        score,
+                                        best_total,
+                                        1e-12,
                                     );
                                     if improved {
                                         best_total = score;
+                                        best_integer = tree.integer_score();
                                         best_path = tree.to_path();
                                     }
                                 }
@@ -2457,43 +2731,20 @@ fn treesa_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                             continue;
                         }
                         let promote_left = rng.gen_bool(0.5);
-                        let Some(change) = tree.rotate_delta(b, promote_left, &mut sc)? else {
+                        let Some(change) = tree.rotate_delta(net, b, promote_left, &mut sc)? else {
                             continue;
                         };
-                        let next_flops_log2 = change.next_flops_log2;
-                        let next_read_write_log2 = change.next_read_write_log2;
-                        let (next_score, accept) = if TRACK_FLOPS && !TRACK_READ_WRITE {
-                            let next = change.next_flops_linear;
-                            let de = (next / flops_linear).log2();
-                            (
-                                next,
-                                next <= flops_linear || rng.gen::<f64>() < (-beta * de).exp(),
-                            )
-                        } else {
-                            let current = objective.score_terms_log2(flops_log2, read_write_log2);
-                            let next =
-                                objective.score_terms_log2(next_flops_log2, next_read_write_log2);
-                            let de = next - current;
-                            (
-                                next,
-                                next <= current || rng.gen::<f64>() < (-beta * de).exp(),
-                            )
-                        };
+
+                        let accept = tree.accept_rotation_log(change, beta, &mut rng);
                         if accept {
+                            let next_score = tree.rotation_ranking_score(change);
                             tree.rotate_apply(b, promote_left, change);
-                            if TRACK_FLOPS && !TRACK_READ_WRITE {
-                                flops_linear = next_score;
-                            } else {
-                                flops_log2 = next_flops_log2;
-                                read_write_log2 = next_read_write_log2;
-                            }
                             let score = next_score;
-                            let improved = improves_ranking_by_relative::<
-                                TRACK_FLOPS,
-                                TRACK_READ_WRITE,
-                            >(score, best_total, 1e-12);
+                            let improved =
+                                tree.improves_incumbent(best_integer, score, best_total, 1e-12);
                             if improved {
                                 best_total = score;
+                                best_integer = tree.integer_score();
                                 best_path = tree.to_path();
                             }
                         }
@@ -2501,10 +2752,6 @@ fn treesa_path_core<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool>(
                 }
                 if TRACK_FLOPS && !TRACK_READ_WRITE {
                     tree.refresh_linear_total()?;
-                    flops_linear = tree.step_linear_total;
-                } else {
-                    flops_log2 = tree.search_flops_log2();
-                    read_write_log2 = tree.search_read_write_log2();
                 }
             }
             Ok((best_path, best_total))
@@ -3010,7 +3257,7 @@ mod fixed_objective_tests {
 
         for ordinal in 0..64 {
             let change = tree
-                .rotate_delta(b, ordinal % 2 == 0, &mut scratch)
+                .rotate_delta(&net, b, ordinal % 2 == 0, &mut scratch)
                 .unwrap()
                 .expect("chosen node remains rotatable");
             tree.rotate_apply(b, ordinal % 2 == 0, change);
@@ -3235,7 +3482,7 @@ mod fixed_objective_tests {
             let b = net.n_tensors();
             let mut scratch = RotScratch::new();
             let change = tree
-                .rotate_delta(b, promote_left, &mut scratch)
+                .rotate_delta(&net, b, promote_left, &mut scratch)
                 .unwrap()
                 .expect("chosen node is rotatable");
             let expected_flops_log2 = change.next_flops_log2;

@@ -50,6 +50,14 @@ cargo run --example contraction
 
 `RAYON_NUM_THREADS` 设置默认 Rayon 线程池的线程数，应用也可以使用自己的 Rayon 线程池。Cargo 的 `mt` feature 启用独立的矩阵乘法线程池；与切片并行同时使用时，应控制总线程数，避免超过可用 CPU 核数。
 
+实验性 Cargo feature `integer-order-dp`（固定叶序 DP）与 `integer-tree-cost`
+（收缩树成本，包括子树重构）可以分别启用，二者默认关闭。一起启用的命令是
+`cargo build --release --locked --features integer-order-dp,integer-tree-cost`。
+它们在索引维度均为 2、目标函数受支持且整数范围足够时使用整数成本；否则使用原有计算。
+整数比较可能改变搜索过程，启用后不保证收缩路径更好。子集 DP 的整数计算不受这两个开关影响。
+Python 源码构建也可选择同名 Cargo feature；重新编译公开扩展不会改变单独构建的
+Light/Heavy 引擎的特性设置。
+
 <a id="python"></a>
 
 ## Python 使用

@@ -50,6 +50,17 @@ cargo run --example contraction
 
 `RAYON_NUM_THREADS` sets the size of the default Rayon thread pool. Applications can also use their own Rayon pools. The Cargo `mt` feature enables a separate matrix multiplication thread pool. When combining it with parallel slice execution, limit the total number of threads to avoid oversubscribing the available CPU cores.
 
+The experimental Cargo features `integer-order-dp` (fixed-leaf-order DP) and
+`integer-tree-cost` (contraction-tree costs, including subtree reconfiguration)
+are independently selectable and disabled by default. To enable both, use
+`cargo build --release --locked --features integer-order-dp,integer-tree-cost`.
+They use checked integer costs for dimension-two networks with supported objectives;
+unsupported or unrepresentable cases use the previous arithmetic. Exact comparisons
+can change the search trajectory, and enabling these features does not guarantee
+better contraction paths. Subset-DP integer arithmetic remains enabled independently.
+Python source builds can select the same Cargo features; rebuilding the public
+extension does not change the feature settings of a separately built Light/Heavy engine.
+
 <a id="python"></a>
 
 ## Python usage
