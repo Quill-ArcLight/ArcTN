@@ -18,6 +18,9 @@ def test_platform_library_selection(tmp_path, monkeypatch, platform, filename):
     library_dir.mkdir(parents=True)
     monkeypatch.setattr(_engine, "__file__", str(package / "_engine.py"))
     monkeypatch.setattr(_engine.sys, "platform", platform)
+    # Register restoration even when no engine was configured initially.
+    # Automatic discovery writes directly to os.environ.
+    monkeypatch.setenv("ARCTN_ENGINE_LIBRARY", "")
     monkeypatch.delenv("ARCTN_ENGINE_LIBRARY", raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PATH", str(tmp_path))
@@ -44,6 +47,9 @@ def test_unknown_platform_does_not_select_engine(tmp_path, monkeypatch):
         (library_dir / filename).touch()
     monkeypatch.setattr(_engine, "__file__", str(package / "_engine.py"))
     monkeypatch.setattr(_engine.sys, "platform", "unsupported")
+    # Register restoration even when no engine was configured initially.
+    # Automatic discovery writes directly to os.environ.
+    monkeypatch.setenv("ARCTN_ENGINE_LIBRARY", "")
     monkeypatch.delenv("ARCTN_ENGINE_LIBRARY", raising=False)
     _engine._configure_bundled_engine()
     assert "ARCTN_ENGINE_LIBRARY" not in os.environ
