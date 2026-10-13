@@ -1,0 +1,50 @@
+ArcTN Light and Heavy engine: noncommercial binary license
+SPDX-License-Identifier: LicenseRef-ArcTN-Engine
+
+Copyright (c) 2026 北京中科弧光量子软件技术有限公司
+
+This license applies to the unmodified official ArcTN Light and Heavy engine
+binaries supplied by the company in complete ArcTN installation packages.
+The engine implementation remains proprietary; this license does not provide
+its source code or grant rights to its source code.
+
+1. Permitted use
+
+The company grants a worldwide, non-exclusive, royalty-free license to download,
+copy, install and run these engine binaries solely for noncommercial purposes.
+You may redistribute an unmodified complete official installation package for
+noncommercial purposes if all copyright notices, license texts and third-party
+notices remain included. Recipients receive the same permissions under this
+license. No permission is granted to modify the proprietary engine or distribute
+a modified engine, except to the extent applicable law permits otherwise.
+
+"Commercial Use" has the meaning stated in section 1 of the accompanying
+Arclight Noncommercial Source-Available License 1.0. Commercial use requires
+separate written authorization from the company. Contact:
+quill@arclightquantum.com.
+
+2. Other components
+
+The public ArcTN source and Python interfaces remain subject to the accompanying
+Arclight Noncommercial Source-Available License 1.0. Its official-engine
+exception permits using this unmodified official binary without disclosing
+the engine implementation. It does not exempt other covered modifications or
+integration code from that source license's requirements.
+
+Third-party components retain their own licenses and notices. This license does
+not restrict rights those licenses grant. No trademark rights are granted.
+
+3. Termination and statutory rights
+
+These permissions terminate if you fail to comply with this license. Termination
+does not terminate the rights of recipients who continue to comply with it.
+Statutory rights that do not require the company's permission are unaffected.
+
+4. No warranty; liability
+
+THE ENGINE IS PROVIDED "AS IS", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE OR
+NONINFRINGEMENT. TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE COMPANY IS NOT
+LIABLE FOR DAMAGES OR OTHER LIABILITY ARISING FROM THE ENGINE OR ITS USE,
+WHETHER UNDER CONTRACT, TORT OR ANOTHER LEGAL THEORY. Nothing here excludes
+liability that applicable law does not allow to be excluded.

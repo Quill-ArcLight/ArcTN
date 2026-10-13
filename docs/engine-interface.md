@@ -33,9 +33,10 @@ platform are currently available. Without an engine, Light/Heavy calls
 return an installation error; independent algorithms and execution of supplied
 paths remain available.
 
-The engine is licensed separately and is not covered by this repository's
-source license. External use or redistribution requires separate authorization; see
-[source and engine availability](../README.md#source-and-availability).
+The engine is licensed separately under the [noncommercial binary
+license](../LICENSE-ARCTN-ENGINE.txt). It permits noncommercial use and redistribution
+of unmodified complete official packages; commercial use requires separate
+authorization. See [installation](../README.md#python-installation) for downloads.
 
 ## C ABI, version 1
 

@@ -15,7 +15,8 @@ material continues to retain its original license and permissions.
 The Light/Heavy engine is maintained separately. Source-only builds do not
 include it. This source license grants no permission to distribute or use
 the proprietary engine. A complete wheel including it needs its own engine
-terms and a dependency and binary-content review.
+terms and a dependency and binary-content review. Official complete packages
+include the [engine binary license](https://github.com/Quill-ArcLight/ArcTN/blob/main/LICENSE-ARCTN-ENGINE.txt).
 
 The Rust locks cover core and Python-extension dependencies separately,
 including optional MPI build dependencies. A source dependency SBOM does not

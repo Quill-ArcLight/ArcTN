@@ -58,17 +58,31 @@ cargo run --example contraction
 
 ### Installation
 
-A complete ArcTN 1.0.0 wheel containing the Light/Heavy engine can be installed without Rust. Obtain a wheel matching your operating system, CPU architecture, and Python version, open a terminal in the directory containing that file, and run:
+A complete ArcTN 1.0.0 wheel includes the Light/Heavy engine and does not require Rust. Download it from the official [ArcTN 1.0.0 release page](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0); the [latest release](https://github.com/Quill-ArcLight/ArcTN/releases/latest) is listed separately. Under **Assets**, choose one `.whl` file matching your operating system, CPU architecture, and Python version:
+
+| Operating system and CPU | Platform text in the filename | Python versions |
+| --- | --- | --- |
+| macOS, Apple silicon | `macosx_..._arm64` | CPython 3.12 and 3.13 |
+| macOS, Intel | `macosx_..._x86_64` | CPython 3.12 and 3.13 |
+| Windows, x86-64 | `win_amd64` | CPython 3.12 and 3.13 |
+| Linux, x86-64 | `manylinux_2_28_x86_64` | CPython 3.12 and 3.13 |
+| Linux, ARM64 | `manylinux_2_28_aarch64` | CPython 3.12 and 3.13 |
+
+The `cp312` and `cp313` filename tags mean CPython 3.12 and 3.13, respectively. Linux wheels require glibc 2.28 or later; the macOS minimum version is encoded in the `macosx_...` tag. Use `python --version` to check your Python version. You only need one matching wheel; the engine is included and loaded automatically.
+
+Complete wheels are provided for noncommercial use. The bundled Light/Heavy engine remains closed source and is covered by the [engine license](LICENSE-ARCTN-ENGINE.txt).
+
+Open a terminal in the directory containing the downloaded wheel and run:
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --find-links=. arctn==1.0.0
+python -m pip install --only-binary=arctn --find-links=. arctn==1.0.0
 ```
 
-`arctn==1.0.0` selects the version to install. `--find-links=.` also searches the current directory for compatible wheels, so you do not need to enter the filename. Dependencies such as NumPy are installed automatically.
+`arctn==1.0.0` selects the version to install. `--find-links=.` also searches the current directory for compatible wheels, so you do not need to enter the filename. `--only-binary=arctn` prevents a source build if no compatible ArcTN wheel is found. Dependencies such as NumPy are installed automatically.
 
-The activation command above is for macOS and Linux. In Windows PowerShell, use `.venv\Scripts\Activate.ps1`. Supported combinations depend on the released wheels.
+The activation command above is for macOS and Linux. In Windows PowerShell, use `.venv\Scripts\Activate.ps1`. After installation, run the [Light/Heavy example below](#light-and-heavy-interface) in this environment.
 
 Building the Python package from this repository requires Python 3.9 or later and Rust 1.83 or later. Follow the [source installation instructions (Chinese)](pybind/README.md#source-installation). A source installation does not include the Light/Heavy shared library; [configure it separately](#engine-library) to use Light/Heavy.
 
@@ -164,4 +178,4 @@ The shared library must match the operating system, CPU architecture, and [ABI v
 
 ## License
 
-Company-owned code is covered by the [Arclight Noncommercial Source-Available License 1.0](LICENSE). Third-party dependencies retain their own licenses. See the [third-party and historical licensing notices](THIRD_PARTY_NOTICES.md) for dependency notices and an explanation of the license texts retained from earlier development revisions. The Light/Heavy shared library is licensed separately. This source license does not grant permission to use or distribute it.
+Company-owned code is covered by the [Arclight Noncommercial Source-Available License 1.0](LICENSE). Third-party dependencies retain their own licenses. See the [third-party and historical licensing notices](THIRD_PARTY_NOTICES.md) for dependency notices and an explanation of the license texts retained from earlier development revisions. The Light/Heavy shared library is covered separately by the [engine license](LICENSE-ARCTN-ENGINE.txt); the source license does not grant permission to use or distribute it.

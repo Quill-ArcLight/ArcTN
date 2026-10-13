@@ -58,17 +58,31 @@ cargo run --example contraction
 
 ### 安装
 
-安装包含 Light/Heavy 引擎的 ArcTN 1.0.0 完整 wheel，无需 Rust。先获取与操作系统、CPU 架构和 Python 版本匹配的安装包，在该 wheel 文件所在的目录打开终端，然后运行：
+ArcTN 1.0.0 完整 wheel 已包含 Light/Heavy 引擎，安装时无需 Rust。请从官方 [ArcTN 1.0.0 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0)下载；其他版本可查看[最新发行版](https://github.com/Quill-ArcLight/ArcTN/releases/latest)。在 **Assets** 中，选择一个与操作系统、CPU 架构和 Python 版本匹配的 `.whl` 文件：
+
+| 操作系统与 CPU | 文件名中的平台标记 | Python 版本 |
+| --- | --- | --- |
+| macOS，Apple 芯片 | `macosx_..._arm64` | CPython 3.12、3.13 |
+| macOS，Intel 芯片 | `macosx_..._x86_64` | CPython 3.12、3.13 |
+| Windows，x86-64 | `win_amd64` | CPython 3.12、3.13 |
+| Linux，x86-64 | `manylinux_2_28_x86_64` | CPython 3.12、3.13 |
+| Linux，ARM64 | `manylinux_2_28_aarch64` | CPython 3.12、3.13 |
+
+文件名中的 `cp312` 和 `cp313` 分别对应 CPython 3.12 和 3.13。Linux 安装包要求 glibc 2.28 或更新版本；macOS 最低系统版本由文件名中的 `macosx_...` 标记指定。可用 `python --version` 查看 Python 版本。只需安装一份匹配的 wheel，引擎已随包附带并自动加载。
+
+完整安装包供非商业使用。随包提供的 Light/Heavy 引擎保持闭源，适用单独的[引擎许可证](LICENSE-ARCTN-ENGINE.txt)。
+
+在下载的 wheel 文件所在目录打开终端，然后运行：
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --find-links=. arctn==1.0.0
+python -m pip install --only-binary=arctn --find-links=. arctn==1.0.0
 ```
 
-`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。NumPy 等依赖会自动安装。
+`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。`--only-binary=arctn` 可避免在找不到兼容的 ArcTN wheel 时转为源码构建。NumPy 等依赖会自动安装。
 
-以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。具体支持的组合以发布的安装包为准。
+以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。安装后，在同一环境中运行下方的 [Light/Heavy 示例](#light-and-heavy-interface)。
 
 从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不包含 Light/Heavy 动态库；调用 Light/Heavy 时需要[单独配置动态库](#engine-library)。
 
@@ -164,4 +178,4 @@ macOS 使用对应的 `.dylib`；Windows 使用 `.dll`，PowerShell 的设置方
 
 ## 许可证
 
-公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖保留各自许可证。第三方声明及早期开发版本中保留的许可文本说明，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库单独许可，本许可证不授权其分发或使用。
+公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖保留各自许可证。第三方声明及早期开发版本中保留的许可文本说明，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库适用单独的[引擎许可证](LICENSE-ARCTN-ENGINE.txt)；源码许可证不授权其分发或使用。

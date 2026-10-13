@@ -24,6 +24,7 @@ include = [
     "/CONTRIBUTING.md",
     "/SECURITY.md",
     "/LICENSE",
+    "/LICENSE-ARCTN-ENGINE.txt",
     "/THIRD_PARTY_NOTICES.md",
     "/THIRD_PARTY_LICENSES/**",
     "/docs/mpi.md",
