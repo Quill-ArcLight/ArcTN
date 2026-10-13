@@ -1,54 +1,20 @@
 # ArcTN
 
-[English](https://github.com/Quill-ArcLight/ArcTN/blob/main/README.md) | **简体中文**
+[English](README.md) | **简体中文**
 
-ArcTN 是用 Rust 编写的张量网络库，提供收缩序优化、切片和数值收缩，并通过 Python 接口接入 Quimb、Cotengra 和 opt_einsum。既可向其他工具提供收缩路径，也可直接执行张量网络收缩。
+ArcTN 是一个用 Rust 编写、提供 Python 接口的张量网络库，用于搜索收缩路径、切片和数值收缩，也可接入 Quimb、Cotengra 和 opt_einsum。
 
-[中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
+[完整安装包](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0) · [中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
 
 <a id="algorithms-and-execution"></a>
 
 ## 主要功能
 
-- 收缩序优化：贪心、随机贪心、子集动态规划、固定叶序动态规划和超图二分。
-- 收缩树优化：子树重构、模拟退火和并行回火（parallel tempering）。
-- 网络化简，以及从化简网络的收缩路径重建原网络的路径。
-- 固定收缩路径的切片，以及允许局部调整收缩路径的动态切片。
-- 实数和复数稠密张量的 CPU 收缩。
-- 收缩路径和切片信息的保存、路径编译与重复执行，以及路径缓存。
-- NumPy 和显式指定的外部数组后端；可选的 MPI 切片并行执行。
-
-网络结构由各输入张量的索引（index）、输出索引和相应维度定义；数值执行时另行提供对应的张量数组。量子电路到张量网络的转换由 Quimb 等前端完成，ArcTN 接收转换后的张量网络。
-
-<a id="source-and-availability"></a>
-
-## 源码与 Light / Heavy
-
-本仓库公开独立算法、网络与路径类型、切片、数值执行、Python 接口和命令行工具。公司有权授权的源码采用 **[Arclight 非商业源码可用许可证 1.0](LICENSE)**，禁止商用和闭源集成；这不是 OSI 标准开源许可。
-
-**Light 和 Heavy 的实现闭源，本仓库提供调用接口。** 从本仓库源码构建的 Rust crate 和 Python wheel 不包含该引擎。没有引擎时，仍可使用 Rust 独立算法、CLI 的 `--method greedy` 和张量数值收缩；Python 可执行已有收缩路径及给定的切片方案，并进行网络化简。
-
-通过 `arctn_path`、`arctn_schedule`、`arctn_plan` 等接口使用 Light/Heavy，需要安装包含引擎的完整 wheel，或单独配置兼容且已获授权的动态库。安装方法见 [Python 使用](#python)。
-
-[CI](https://github.com/Quill-ArcLight/ArcTN/actions/workflows/test.yml) 在 Linux、macOS 和 Windows 上运行 Rust 与 CPython 3.13 测试，并在 Linux 上运行 Open MPI 多进程测试。
-
-MPI 是可选的切片并行执行功能。`tnmpi` 只支持内部索引切片：将切片分配给各进程，按已保存的收缩路径执行计算，最后对各进程的结果求和。含输出索引切片的计划需要使用单进程执行。普通单机 Rust/Python 功能不需要 MPI。安装和运行要求见 [MPI 文档](docs/mpi.md)。
-
-<a id="rust"></a>
-
-## Rust 使用
-
-源码构建需要 Rust 1.82 或更新版本：
-
-```sh
-git clone https://github.com/Quill-ArcLight/ArcTN.git
-cd ArcTN
-cargo build --release
-cargo test
-cargo run --example contraction
-```
-
-`RAYON_NUM_THREADS` 设置默认 Rayon 线程池的线程数，应用也可以使用自己的 Rayon 线程池。Cargo 的 `mt` feature 启用独立的矩阵乘法线程池；与切片并行同时使用时，应控制总线程数，避免超过可用 CPU 核数。
+- 搜索收缩路径，提供 Light 和 Heavy 两种搜索预设。
+- 化简张量网络，通过切片减小中间张量。
+- 在 CPU 上执行实数和复数张量收缩。
+- 保存、复用收缩路径，编译后重复执行计算。
+- 接入其他 Python 张量网络工具；可选 MPI 切片并行执行。
 
 <a id="python"></a>
 
@@ -58,21 +24,19 @@ cargo run --example contraction
 
 ### 安装
 
-ArcTN 1.0.0 完整 wheel 已包含 Light/Heavy 引擎，安装时无需 Rust。请从官方 [ArcTN 1.0.0 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0)下载；其他版本可查看[最新发行版](https://github.com/Quill-ArcLight/ArcTN/releases/latest)。在 **Assets** 中，选择一个与操作系统、CPU 架构和 Python 版本匹配的 `.whl` 文件：
+从 [ArcTN 1.0.0 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0)的 **Assets** 中，下载一份与系统和 Python 版本匹配的 `.whl`。完整包已包含 Light/Heavy 引擎，无需安装 Rust 或手动配置动态库。
 
-| 操作系统与 CPU | 文件名中的平台标记 | Python 版本 |
-| --- | --- | --- |
-| macOS，Apple 芯片 | `macosx_..._arm64` | CPython 3.12、3.13 |
-| macOS，Intel 芯片 | `macosx_..._x86_64` | CPython 3.12、3.13 |
-| Windows，x86-64 | `win_amd64` | CPython 3.12、3.13 |
-| Linux，x86-64 | `manylinux_2_28_x86_64` | CPython 3.12、3.13 |
-| Linux，ARM64 | `manylinux_2_28_aarch64` | CPython 3.12、3.13 |
+| 系统与处理器 | 文件名中的平台标记 |
+| --- | --- |
+| macOS，Apple 芯片 | `macosx_..._arm64` |
+| macOS，Intel 芯片 | `macosx_..._x86_64` |
+| Windows，x86-64 | `win_amd64` |
+| Linux，x86-64 | `manylinux_2_28_x86_64` |
+| Linux，ARM64 | `manylinux_2_28_aarch64` |
 
-文件名中的 `cp312` 和 `cp313` 分别对应 CPython 3.12 和 3.13。Linux 安装包要求 glibc 2.28 或更新版本；macOS 最低系统版本由文件名中的 `macosx_...` 标记指定。可用 `python --version` 查看 Python 版本。只需安装一份匹配的 wheel，引擎已随包附带并自动加载。
+每个平台均提供 CPython 3.12（`cp312`）和 3.13（`cp313`）安装包。用 `python --version` 查看版本。Linux 要求 glibc 2.28 或更新版本；macOS 最低版本见安装包文件名。
 
-完整安装包供非商业使用。随包提供的 Light/Heavy 引擎保持闭源，适用单独的[引擎许可证](LICENSE-ARCTN-ENGINE.txt)。
-
-在下载的 wheel 文件所在目录打开终端，然后运行：
+在下载的 wheel 所在目录打开终端，创建环境并安装：
 
 ```sh
 python -m venv .venv
@@ -80,19 +44,13 @@ source .venv/bin/activate
 python -m pip install --only-binary=arctn --find-links=. arctn==1.0.0
 ```
 
-`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。`--only-binary=arctn` 可避免在找不到兼容的 ArcTN wheel 时转为源码构建。NumPy 等依赖会自动安装。
-
-以上激活命令适用于 macOS 和 Linux；Windows PowerShell 使用 `.venv\Scripts\Activate.ps1`。安装后，在同一环境中运行下方的 [Light/Heavy 示例](#light-and-heavy-interface)。
-
-从本仓库源码安装需要 Python 3.9 或更新版本、Rust 1.83 或更新版本，操作见 [Python 源码安装](pybind/README.md#source-installation)。源码安装不包含 Light/Heavy 动态库；调用 Light/Heavy 时需要[单独配置动态库](#engine-library)。
+Windows PowerShell 将第二行替换为 `.venv\Scripts\Activate.ps1`。NumPy 等依赖会自动安装，以下示例在同一环境中运行。
 
 <a id="light-and-heavy-interface"></a>
 
-### 调用 Light / Heavy
+### 搜索收缩路径
 
-先按[安装步骤](#python-installation)安装包含 Light/Heavy 引擎的完整 wheel，再在同一个 Python 环境中运行下面的代码。使用完整 wheel 不需要克隆源码或安装 Rust，也不需要手动加载动态库。
-
-**导入的是 `arctn_path` 函数，Light 和 Heavy 由 `preset` 参数选择，不是两个需要单独导入的 Python 模块。** 导入时，Python 接口会自动识别安装包中的引擎动态库；第一次调用搜索函数时再加载并运行它。下面的例子使用 Light：
+下面以三个矩阵相乘为例，输入形状依次为 `(2, 3)`、`(3, 4)` 和 `(4, 2)`，输出形状为 `(2, 2)`：
 
 ```python
 from arctn import arctn_path
@@ -101,81 +59,71 @@ inputs = [["a", "b"], ["b", "c"], ["c", "d"]]
 output = ["a", "d"]
 size_dict = {"a": 2, "b": 3, "c": 4, "d": 2}
 
-path = arctn_path(
-    inputs, output, size_dict,
-    preset="light",
-    seed=0,
-)
+path = arctn_path(inputs, output, size_dict, preset="light", seed=0)
 print(path)
 ```
 
-**使用 Heavy 时，只需把 `preset="light"` 改成 `preset="heavy"`，不需要重新安装或更换导入语句。** 未指定 `preset` 时默认使用 Heavy。
+`inputs` 列出各张量的索引，`output` 指定输出索引及顺序，`size_dict` 给出索引维度。返回的 `path` 是每一步收缩哪两个张量的列表；此调用只搜索路径，不需要张量数值。
 
-`inputs` 按张量顺序列出各自的索引，`output` 指定结果保留的索引及顺序，`size_dict` 给出各索引的维度。这个例子表示三个矩阵的乘积，输入形状分别为 `(2, 3)`、`(3, 4)` 和 `(4, 2)`，输出形状为 `(2, 2)`。
+**使用 Heavy，只需把 `preset="light"` 改成 `preset="heavy"`。** 两者使用相同的导入方式；不指定 `preset` 时默认使用 Heavy。
 
-`arctn_path` 只搜索收缩序，不执行数值收缩，因此不需要矩阵中的数值。返回值是一组二元组，表示每一步收缩哪两个张量；默认使用 opt_einsum 的 linear path 格式，设置 `use_ssa=True` 可返回 SSA path。
+### 直接执行收缩
 
-`seed` 指定搜索使用的随机种子。两种模式使用相同的优化目标参数，默认是 `flops_weight=1, read_write_weight=64`；设置 `read_write_weight=0` 可仅优化 FLOPs。
-
-如果还需要路径指标，改用 `arctn_schedule`。沿用上面的网络定义：
-
-```python
-from arctn import arctn_schedule
-
-result = arctn_schedule(inputs, output, size_dict, preset="heavy", seed=0)
-print("Path:", result["path"])
-print("log10 FLOPs:", result["log10_flops"])
-print("log2 largest intermediate:", result["log2_max_size"])
-```
-
-`arctn_schedule` 返回字典，包含最终路径、优化目标的权重、路径指标、可选的切片结果和收缩序优化耗时。上面的 `log10_flops` 是 FLOPs 的以 10 为底的对数，`log2_max_size` 是最大中间张量元素数的以 2 为底的对数。
-
-按需要选择调用入口，不需要依次调用：
-
-| 需求 | 从 `arctn` 导入 | 返回值 |
-| --- | --- | --- |
-| 只搜索收缩序 | `arctn_path` | 一条收缩路径 |
-| 搜索并查看路径指标，或生成切片方案 | `arctn_schedule` | 包含路径和指标的字典 |
-| 搜索后直接执行收缩 | `arctn_contract` | 结果数组；设置 `return_info=True` 时返回 `(result, info)` |
-
-这三个入口都通过 `preset` 选择 Light 或 Heavy。`arctn_contract` 还需要按 `inputs` 的顺序传入 `arrays`，默认使用 Rust CPU 执行器。其他调用方式及 Quimb 接入见 [Python 接口说明](pybind/README.md#interfaces)。
-
-`arctn_schedule` 和 `arctn_contract` 接受 `target_size`，限制每个切片中生成的单个中间张量的元素数，不是进程总内存上限。`max_time` 的单位是秒，由搜索过程检查，不会由操作系统强制终止进程。
-
-切片默认使用 `allow_output_slicing=False`，只选择内部索引。设置 `allow_output_slicing=True` 并提供大小目标后，也可选择输出索引。执行时，内部切片在各输出块内求和，不同输出块按声明的输出轴顺序组装。完整输出仍需占用全部存储空间，其大小可以超过 `target_size`。`arctn_plan`、`arctn_tree` 和 `ArcTNOptimizer` 也接受这一选项。
-
-### 执行已有收缩路径
-
-如果已经有收缩路径，可直接编译并执行，不需要调用 Light/Heavy。以下是一个独立的矩阵乘法示例：
+沿用上面的网络定义，按 `inputs` 的顺序提供浮点或复数数组：
 
 ```python
 import numpy as np
-from arctn import ArcTNCompiledContraction
+from arctn import arctn_contract
 
-inputs, output = [["a", "b"], ["b", "c"]], ["a", "c"]
-sizes = {"a": 2, "b": 3, "c": 2}
-compiled = ArcTNCompiledContraction.compile(inputs, output, sizes, ssa_path=[(0, 1)])
-a = np.arange(6, dtype=np.float64).reshape(2, 3)
-b = np.arange(6, dtype=np.float64).reshape(3, 2)
-np.testing.assert_allclose(compiled([a, b]), a @ b)
+arrays = [
+    np.arange(6, dtype=float).reshape(2, 3),
+    np.arange(12, dtype=float).reshape(3, 4),
+    np.arange(8, dtype=float).reshape(4, 2),
+]
+result = arctn_contract(inputs, output, size_dict, arrays, preset="light", seed=0)
+print(result)
 ```
 
-<a id="engine-library"></a>
+`arctn_contract` 会搜索路径并执行计算，返回结果数组。上例等价于 `arrays[0] @ arrays[1] @ arrays[2]`。
 
-### 单独配置 Light/Heavy 动态库
+根据需要选择入口，无需依次调用：
 
-从 Rust 调用 Light/Heavy、使用 Python 源码安装，或需要指定其他兼容动态库时，在首次调用前设置动态库的绝对路径：
+| 需求 | 函数 | 返回值 |
+| --- | --- | --- |
+| 只搜索路径 | `arctn_path` | 收缩路径 |
+| 查看路径、计算量和切片方案 | `arctn_schedule` | 包含路径与指标的字典 |
+| 搜索并执行收缩 | `arctn_contract` | 结果数组 |
+
+### 常用设置
+
+- `preset="light"` 或 `"heavy"`：选择搜索预设。
+- `seed=0`：指定搜索的随机种子。
+- `max_time=10.0`：设置搜索时间预算，单位秒，不是整个数值计算的强制超时。
+- `read_write_weight=0`：只按 FLOPs 优化路径；默认也考虑读写成本。
+
+`arctn_schedule` 和 `arctn_contract` 还支持 `target_size`，用于设置每个切片中单个中间张量的元素数上限，不是整个程序的内存上限。需要对输出索引切片时，同时设置 `allow_output_slicing=True`；执行后仍返回完整输出。
+
+其他参数、路径复用和 Quimb 接入示例见 [Python 接口说明](pybind/README.md#interfaces)。MPI 的安装和使用见 [MPI 文档](docs/mpi.md)；目前仅支持内部索引切片。
+
+<a id="rust"></a>
+
+## Rust 使用
+
+需要 Rust 1.82 或更新版本：
 
 ```sh
-export ARCTN_ENGINE_LIBRARY=/absolute/path/to/libarctn_engine.so
+git clone https://github.com/Quill-ArcLight/ArcTN.git
+cd ArcTN
+cargo run --release --example contraction
 ```
 
-macOS 使用对应的 `.dylib`；Windows 使用 `.dll`，PowerShell 的设置方式见 [动态库接口说明](docs/engine-interface.md)。显式设置的 `ARCTN_ENGINE_LIBRARY` 优先于 Python 包中附带的动态库。
+<a id="source-and-availability"></a>
+<a id="engine-library"></a>
 
-动态库必须与操作系统、CPU 架构和 [ABI 版本](docs/engine-interface.md#c-abi-version-1) 匹配，并来自可信来源。没有可用动态库时，Light/Heavy 调用会报告安装错误，不影响独立算法或已有路径的执行。
+本仓库公开独立算法、切片、数值执行和调用接口。Light/Heavy 引擎保持闭源，完整 wheel 已包含引擎；自行从源码构建时需[单独配置引擎](docs/engine-interface.md)。Python 源码安装见[构建说明](pybind/README.md#source-installation)。
 
 <a id="license"></a>
 
 ## 许可证
 
-公司代码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)。第三方依赖保留各自许可证。第三方声明及早期开发版本中保留的许可文本说明，见 [第三方及历史授权说明](THIRD_PARTY_NOTICES.md)。Light/Heavy 动态库适用单独的[引擎许可证](LICENSE-ARCTN-ENGINE.txt)；源码许可证不授权其分发或使用。
+本项目供非商业使用。公开源码适用 [Arclight 非商业源码可用许可证 1.0](LICENSE)，Light/Heavy 引擎适用单独的[引擎许可证](LICENSE-ARCTN-ENGINE.txt)。第三方依赖保留各自许可证，见[第三方声明](THIRD_PARTY_NOTICES.md)。
