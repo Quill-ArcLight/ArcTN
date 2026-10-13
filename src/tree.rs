@@ -170,7 +170,7 @@ pub struct CTreeCore<const TRACK_FLOPS: bool, const TRACK_READ_WRITE: bool> {
     step_linear_cache: Vec<f64>,
     step_linear_total: f64,
     read_write_log2_sum: LogSumTree,
-    /// Exact active-objective costs, when every actual tree term fits u128.
+    /// Exact costs for the active objective when its terms, totals, and score fit u128.
     integer_costs: Option<IntegerTreeCosts>,
     /// Once any proposed state overflows, keep this tree on legacy arithmetic.
     integer_enabled: bool,

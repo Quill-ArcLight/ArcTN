@@ -319,6 +319,8 @@ pub fn optimize(
 /// This preserves the version 1 engine ABI and works with existing engines.
 /// Execution assembles a complete output, whose storage is not bounded by the
 /// per-slice size target. Without the option, engine behavior is unchanged.
+/// `max_time` applies to the engine search; the subsequent slicing stage runs
+/// without a deadline.
 #[allow(clippy::too_many_arguments)]
 pub fn optimize_with_output_slicing(
     net: &TensorNetwork,

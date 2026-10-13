@@ -207,8 +207,8 @@ fn checked_product(dims: impl IntoIterator<Item = usize>) -> Result<usize, Strin
 
 fn sliced_network(net: &TensorNetwork, sliced: &[LegId]) -> Result<TensorNetwork, String> {
     arctn::slice::validate_slice_legs(net, sliced)?;
-    // MPI combines rank-local tensors by elementwise reduction. Output blocks
-    // require a different collective and remain a single-process capability.
+    // This executor reduces complete slice outputs elementwise.
+    // Assembly of output blocks across MPI ranks is not implemented here.
     if sliced.iter().any(|leg| net.output.contains(leg)) {
         return Err("tnmpi supports internal-index slicing only; output-index slicing requires single-process execution".into());
     }

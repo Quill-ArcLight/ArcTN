@@ -1,7 +1,9 @@
-//! Exact bitmask dynamic programming for contraction paths.
+//! Subset dynamic programming for contraction paths.
 //!
-//! Each tensor occupies one bit. Connected components are solved separately,
-//! then their roots are merged by an exact outer-product DP. Cost is exponential.
+//! Each tensor occupies one bit. Connected components are solved separately.
+//! Within a component, only adjacent subsets may be merged; completed components
+//! are then combined by an outer-product DP. Each DP minimizes cost over these
+//! allowed splits. Worst-case time and memory are exponential.
 //! Binary dimensions use exact u128 costs when a conservative bound fits and the
 //! objective is a single term or the default FLOPs + 64 * read/write objective.
 //! Other inputs retain the original arithmetic. Reported metrics still use logs.

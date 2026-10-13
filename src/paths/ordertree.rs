@@ -2,10 +2,10 @@
 //!
 //! Leaf orders may come from an existing path or reverse Cuthill-McKee ordering.
 //!
-//! `logS(i,j)` stores the result size of interval `i..=j`. Adjacent occurrence
-//! pairs for each leg form a two-dimensional prefix sum, allowing the shared
-//! leg weight of a split to be queried in `O(1)`. Adjacent pairs cross any
-//! boundary uniquely, including legs with more than two holders.
+//! `logS(i,j)` stores the base-two logarithm of the result size for `i..=j`.
+//! Adjacent occurrence pairs for each leg form a two-dimensional prefix sum,
+//! allowing the shared leg weight of a split to be queried in `O(1)`. Adjacent
+//! pairs cross any boundary uniquely, including legs with more than two holders.
 //!
 //! With the default `integer-order-dp` feature, binary dimensions use checked
 //! integer costs for supported objectives when a complete cost fits u128.
