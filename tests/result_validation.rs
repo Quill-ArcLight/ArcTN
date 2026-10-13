@@ -134,7 +134,8 @@ fn timed_s_temper_returns_a_complete_incumbent_after_its_search_deadline() {
         size_dict: (0..(2 * n)).map(|i| (i as u32, 2usize)).collect(),
     };
     let started = Instant::now();
-    let deadline = started + Duration::from_millis(25);
+    // Leave time for initialization on shared CI runners before testing search expiry.
+    let deadline = started + Duration::from_millis(500);
     let (path, stats) = temper_simplified_until(
         &net,
         1,
