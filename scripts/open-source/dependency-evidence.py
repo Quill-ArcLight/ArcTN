@@ -97,9 +97,9 @@ def main():
     aggregate = "arctn-source-release"
     bom = dict(bomFormat="CycloneDX", specVersion="1.5", serialNumber=f"urn:uuid:{uuid.uuid4()}", version=1,
         metadata=dict(timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            component={"type": "application", "name": "ArcTN source release", "version": "1.0.0", "bom-ref": aggregate},
+            component={"type": "application", "name": "ArcTN source release", "version": "1.0.1", "bom-ref": aggregate},
             properties=[dict(name="arctn:scope", value="Union of both Cargo lockfiles, all features/platform dependencies including dev/build. Excludes Python distributions, proprietary engine, MPI runtime, OS and arbitrary external backends.")]),
-        components=components, dependencies=[{"ref": aggregate, "dependsOn": ["pkg:cargo/arctn@1.0.0", "pkg:cargo/arctn-py@1.0.0"]}] +
+        components=components, dependencies=[{"ref": aggregate, "dependsOn": ["pkg:cargo/arctn@1.0.1", "pkg:cargo/arctn-py@1.0.1"]}] +
             [{"ref": key, "dependsOn": sorted(nodes.get(key, []))} for key in sorted(packages)])
     write_json(REPORTS / "workspace-source.cdx.json", bom)
     write_json(REPORTS / "cargo-license-inventory.json", inventory)

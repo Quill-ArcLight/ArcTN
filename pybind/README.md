@@ -10,7 +10,7 @@ Python 包提供收缩序优化、路径保存与加载、切片和数值收缩�
 
 ## 安装完整 wheel
 
-从 [ArcTN 1.0.0 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0)
+从 [ArcTN 1.0.1 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.1)
 获取完整 wheel，安装时不需要 Rust。根据[平台选择说明](../README.zh-CN.md#python-installation)
 下载与系统、处理器和 Python 版本匹配的一份文件。完整包提供 CPython 3.12 和 3.13 版本；
 源码支持 Python 3.9 及以上版本。
@@ -19,10 +19,10 @@ Python 包提供收缩序优化、路径保存与加载、切片和数值收缩�
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --only-binary=arctn --find-links=. arctn==1.0.0
+python -m pip install --only-binary=arctn --find-links=. arctn==1.0.1
 ```
 
-`arctn==1.0.0` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。
+`arctn==1.0.1` 指定安装版本；`--find-links=.` 让 pip 同时在当前目录查找兼容的 wheel，不需要手动填写文件名。
 
 在 Windows PowerShell 中，请改用 `.venv\Scripts\Activate.ps1` 激活虚拟环境。
 Linux、macOS 和 Windows 的 wheel 不能跨平台使用；具体可安装的组合以实际提供的文件为准。
