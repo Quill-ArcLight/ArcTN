@@ -117,6 +117,33 @@ cd ArcTN
 cargo run --release --example contraction
 ```
 
+### Running a plan step by step
+
+If every pair contraction needs to go on your own autograd tape, run
+`CompiledContraction` one stage at a time instead of calling `execute`. Each step
+knows its slots, legs, shapes and GEMM sizes, and `step.execute(left, right)`
+contracts just that pair. The result is bit-identical to `execute`.
+
+```rust
+use arctn::{CompiledContraction, DenseTensor};
+
+let compiled = CompiledContraction::compile(&net, &path)?;
+let mut slots: Vec<Option<DenseTensor<f64>>> = compiled
+    .input_preps()
+    .iter()
+    .zip(&tensors)
+    .map(|(prep, t)| prep.execute(t).map(Some))
+    .collect::<Result<_, _>>()?;
+for step in compiled.pair_steps() {
+    let left = slots[step.left_slot()].take().unwrap();
+    let right = slots[step.right_slot()].take().unwrap();
+    // record step.left_legs(), right_legs(), result_legs() here
+    slots.push(Some(step.execute(&left, &right)?));
+}
+let fin = compiled.finalize();
+let result = fin.execute(slots[fin.slot()].as_ref().unwrap())?;
+```
+
 <a id="source-and-availability"></a>
 <a id="engine-library"></a>
 

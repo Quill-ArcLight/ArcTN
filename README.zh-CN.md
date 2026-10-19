@@ -117,6 +117,32 @@ cd ArcTN
 cargo run --release --example contraction
 ```
 
+### 逐步执行编译好的计划
+
+如果要把每一步成对收缩记进自己的自动微分图，可以不调用整网 `execute`，按阶段自己跑。
+每一步都能查到槽位、腿、形状和 GEMM 尺寸，`step.execute(left, right)` 只收缩这一对张量，
+结果和整网 `execute` 逐位一致。
+
+```rust
+use arctn::{CompiledContraction, DenseTensor};
+
+let compiled = CompiledContraction::compile(&net, &path)?;
+let mut slots: Vec<Option<DenseTensor<f64>>> = compiled
+    .input_preps()
+    .iter()
+    .zip(&tensors)
+    .map(|(prep, t)| prep.execute(t).map(Some))
+    .collect::<Result<_, _>>()?;
+for step in compiled.pair_steps() {
+    let left = slots[step.left_slot()].take().unwrap();
+    let right = slots[step.right_slot()].take().unwrap();
+    // 在这里把 step.left_legs()、right_legs()、result_legs() 记进计算图
+    slots.push(Some(step.execute(&left, &right)?));
+}
+let fin = compiled.finalize();
+let result = fin.execute(slots[fin.slot()].as_ref().unwrap())?;
+```
+
 <a id="source-and-availability"></a>
 <a id="engine-library"></a>
 
