@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Simplify networks with a work queue that revisits a low-rank tensor only when a
+  contraction changes its lowest-ID neighbor on one of its legs, with ordered
+  holder sets. The reduced network and SSA prefix are unchanged. Networks whose
+  legs are shared by thousands of tensors no longer rescan every live tensor or
+  every holder after each contraction.
 - Preserve one-shot input and output iterables in `arctn_plan` by materializing
   them once before planning and execution-plan validation. In particular, an
   output iterator no longer silently turns a unary tensor output into a scalar.
