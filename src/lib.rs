@@ -30,7 +30,9 @@ pub use auto::{
     auto_path_preset_to_size_with_mode_and_objective, auto_path_preset_to_size_with_objective,
     auto_path_preset_with_objective, AutoPreset, SlicingMode,
 };
-pub use compiled::CompiledContraction;
+pub use compiled::{
+    CompiledContraction, CompiledFinalize, CompiledInputPrep, CompiledPairContraction,
+};
 pub use contract::contract_network;
 pub use execution_plan::{
     complete_execution_plan_v2, parse_embedded_execution_plan, parse_execution_plan_for_network,

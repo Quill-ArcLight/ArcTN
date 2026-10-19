@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Allow running `CompiledContraction` one stage at a time through
+  `input_preps()`, `pair_steps()` and `finalize()`. A pair step knows its slots,
+  legs, shapes and GEMM sizes, and `execute(left, right)` contracts just that
+  pair without rebuilding or replanning anything. Useful for autograd callers;
+  the result matches `execute` exactly.
 - Simplify networks with a work queue that revisits a low-rank tensor only when a
   contraction changes its lowest-ID neighbor on one of its legs, with ordered
   holder sets. The reduced network and SSA prefix are unchanged. Networks whose

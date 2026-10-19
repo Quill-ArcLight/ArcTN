@@ -3,6 +3,11 @@
 //! Compilation records reduction axes, permutations, GEMM dimensions, and result
 //! shapes. Execution reuses these data-independent mappings. Stripped execution
 //! separates a decimal exponent to reduce overflow risk.
+//!
+//! The stages can also be run one by one, e.g. to put each pair contraction on
+//! an autograd tape. Slot `i < n_inputs` is prepared input `i`; pair step `s`
+//! writes slot `n_inputs + s`. Running preps, steps and finalize in order gives
+//! the same bits as `execute`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -11,19 +16,75 @@ use crate::network::{LegId, TensorNetwork};
 use crate::path::{simulate_path, sorted_dedup, SsaPath};
 use crate::tensor::{DenseTensor, Scalar};
 
-/// Preprocessing plan for one input tensor.
+/// Shape/layout check against the plan.
+fn check_operand<T>(t: &DenseTensor<T>, want: &[usize], label: &str) -> Result<(), String> {
+    t.validate_layout()
+        .map_err(|e| format!("{label} 布局非法: {e}"))?;
+    if t.shape != want {
+        return Err(format!(
+            "{label} shape {:?} 与编译计划期望维度 {:?} 不符",
+            t.shape, want
+        ));
+    }
+    Ok(())
+}
+
+/// Traces and diagonals applied to one input.
 #[derive(Clone, Debug)]
-struct InputPrep {
+pub struct CompiledInputPrep {
+    input_shape: Vec<usize>,
     /// Ordered `(ax_i, ax_j, is_diag)` operations on the current tensor rank.
     /// Diagonal extraction keeps one axis; a trace removes both.
     traces: Vec<(usize, usize, bool)>,
+    /// Legs of the prepared tensor in axis order.
+    legs: Vec<LegId>,
+    shape: Vec<usize>,
 }
 
-/// Integer-only plan for one pairwise contraction.
+impl CompiledInputPrep {
+    /// True if the input is used as is.
+    pub fn is_identity(&self) -> bool {
+        self.traces.is_empty()
+    }
+    pub fn input_shape(&self) -> &[usize] {
+        &self.input_shape
+    }
+    /// Legs of the prepared tensor in axis order.
+    pub fn legs(&self) -> &[LegId] {
+        &self.legs
+    }
+    pub fn shape(&self) -> &[usize] {
+        &self.shape
+    }
+
+    pub fn execute<T: Scalar>(&self, input: &DenseTensor<T>) -> Result<DenseTensor<T>, String> {
+        check_operand(input, &self.input_shape, "输入张量")?;
+        Ok(self.apply(input.clone()))
+    }
+
+    fn apply<T: Scalar>(&self, mut t: DenseTensor<T>) -> DenseTensor<T> {
+        for &(ax_i, ax_j, is_diag) in &self.traces {
+            t = if is_diag {
+                t.diag_pair(ax_i, ax_j)
+            } else {
+                t.trace_pair(ax_i, ax_j)
+            };
+        }
+        t
+    }
+}
+
+/// One precompiled pair contraction: planned sums, permutes, then batched GEMM.
 #[derive(Clone, Debug)]
-struct Step {
+pub struct CompiledPairContraction {
     li: usize,
     ri: usize,
+    out: usize,
+    left_legs: Vec<LegId>,
+    right_legs: Vec<LegId>,
+    result_legs: Vec<LegId>,
+    left_shape: Vec<usize>,
+    right_shape: Vec<usize>,
     /// Axes reduced from A in order as its rank decreases.
     sum_a: Vec<usize>,
     sum_b: Vec<usize>,
@@ -38,21 +99,132 @@ struct Step {
     result_shape: Vec<usize>,
 }
 
+impl CompiledPairContraction {
+    /// SSA slot of the left operand.
+    pub fn left_slot(&self) -> usize {
+        self.li
+    }
+    /// SSA slot of the right operand.
+    pub fn right_slot(&self) -> usize {
+        self.ri
+    }
+    /// SSA slot written by this step.
+    pub fn result_slot(&self) -> usize {
+        self.out
+    }
+    /// Legs of the left operand in axis order.
+    pub fn left_legs(&self) -> &[LegId] {
+        &self.left_legs
+    }
+    /// Legs of the right operand in axis order.
+    pub fn right_legs(&self) -> &[LegId] {
+        &self.right_legs
+    }
+    /// Result legs, ordered `[batch, free_left, free_right]`. Operand legs not
+    /// listed here are summed out in this step.
+    pub fn result_legs(&self) -> &[LegId] {
+        &self.result_legs
+    }
+    pub fn left_shape(&self) -> &[usize] {
+        &self.left_shape
+    }
+    pub fn right_shape(&self) -> &[usize] {
+        &self.right_shape
+    }
+    pub fn result_shape(&self) -> &[usize] {
+        &self.result_shape
+    }
+    /// Batched GEMM geometry `(batch, m, k, n)`.
+    pub fn gemm_dims(&self) -> (usize, usize, usize, usize) {
+        (self.bt, self.m, self.k, self.n)
+    }
+
+    /// Contract `left` and `right` with this step.
+    pub fn execute<T: Scalar>(
+        &self,
+        left: &DenseTensor<T>,
+        right: &DenseTensor<T>,
+    ) -> Result<DenseTensor<T>, String> {
+        check_operand(left, &self.left_shape, "左操作数")?;
+        check_operand(right, &self.right_shape, "右操作数")?;
+        let c = self.gemm(left, right)?;
+        DenseTensor::try_from_data(self.result_shape.clone(), c)
+            .map_err(|e| format!("预编译 GEMM 结果布局非法: {e}"))
+    }
+
+    fn gemm<T: Scalar>(&self, a: &DenseTensor<T>, b: &DenseTensor<T>) -> Result<Vec<T>, String> {
+        let mut a_red;
+        let mut a = a;
+        for &ax in &self.sum_a {
+            a_red = a.sum_axis(ax);
+            a = &a_red;
+        }
+        let mut b_red;
+        let mut b = b;
+        for &ax in &self.sum_b {
+            b_red = b.sum_axis(ax);
+            b = &b_red;
+        }
+        let a = a.permute(&self.a_perm);
+        let b = b.permute(&self.b_perm);
+        checked_batch_gemm(&a, &b, self.bt, self.m, self.k, self.n)
+    }
+}
+
+/// Last stage: sum leftover legs and permute to the output order.
+#[derive(Clone, Debug)]
+pub struct CompiledFinalize {
+    slot: usize,
+    input_legs: Vec<LegId>,
+    input_shape: Vec<usize>,
+    /// Residual reduction axes for one-tensor networks.
+    sum: Vec<usize>,
+    /// Permutation into output order.
+    perm: Vec<usize>,
+    output_shape: Vec<usize>,
+}
+
+impl CompiledFinalize {
+    /// Slot of the tensor left after the last pair step.
+    pub fn slot(&self) -> usize {
+        self.slot
+    }
+    pub fn input_legs(&self) -> &[LegId] {
+        &self.input_legs
+    }
+    pub fn input_shape(&self) -> &[usize] {
+        &self.input_shape
+    }
+    pub fn output_shape(&self) -> &[usize] {
+        &self.output_shape
+    }
+    /// True if this stage is a no-op.
+    pub fn is_identity(&self) -> bool {
+        self.sum.is_empty() && self.perm.iter().enumerate().all(|(i, &p)| i == p)
+    }
+
+    pub fn execute<T: Scalar>(&self, t: &DenseTensor<T>) -> Result<DenseTensor<T>, String> {
+        check_operand(t, &self.input_shape, "收尾张量")?;
+        Ok(self.apply(t.clone()))
+    }
+
+    fn apply<T: Scalar>(&self, mut t: DenseTensor<T>) -> DenseTensor<T> {
+        for &ax in &self.sum {
+            t = t.sum_axis(ax);
+        }
+        let t = t.permute(&self.perm);
+        debug_assert_eq!(t.shape, self.output_shape);
+        t
+    }
+}
+
 /// Reusable contraction plan independent of tensor values.
 #[derive(Clone, Debug)]
 pub struct CompiledContraction {
     n_inputs: usize,
-    /// Expected input shapes validated before GEMM.
-    input_shapes: Vec<Vec<usize>>,
-    input_prep: Vec<InputPrep>,
-    steps: Vec<Step>,
-    /// Slot containing the sole final tensor.
-    final_slot: usize,
-    /// Final reduction axes for one-tensor networks.
-    final_sum: Vec<usize>,
-    /// Final permutation into output order.
-    final_perm: Vec<usize>,
-    final_shape: Vec<usize>,
+    input_prep: Vec<CompiledInputPrep>,
+    steps: Vec<CompiledPairContraction>,
+    finalize: CompiledFinalize,
     /// Planning statistics computed during compilation.
     pub log10_flops: f64,
     pub log2_peak_size: f64,
@@ -64,6 +236,17 @@ impl CompiledContraction {
     }
     pub fn n_steps(&self) -> usize {
         self.steps.len()
+    }
+    /// Entry `i` produces slot `i`.
+    pub fn input_preps(&self) -> &[CompiledInputPrep] {
+        &self.input_prep
+    }
+    /// In execution order; step `s` writes slot `n_inputs + s`.
+    pub fn pair_steps(&self) -> &[CompiledPairContraction] {
+        &self.steps
+    }
+    pub fn finalize(&self) -> &CompiledFinalize {
+        &self.finalize
     }
 
     /// Compiles a symbolic leg-accounting pass into integer execution steps.
@@ -99,7 +282,12 @@ impl CompiledContraction {
             let mut legs = legs0.clone();
             let external = |l: LegId| refcount[&l] > 1 || in_output.contains(&l);
             let traces = plan_traces(&mut legs, &external)?;
-            input_prep.push(InputPrep { traces });
+            input_prep.push(CompiledInputPrep {
+                input_shape: legs0.iter().map(|&l| net.dim(l)).collect(),
+                traces,
+                shape: legs.iter().map(|&l| net.dim(l)).collect(),
+                legs: legs.clone(),
+            });
             slots.push(Some(legs));
         }
 
@@ -120,7 +308,7 @@ impl CompiledContraction {
                 *refcount.get_mut(&l).unwrap() -= 1;
             }
             let keep = |l: LegId| refcount[&l] > 0 || in_output.contains(&l);
-            let (rlegs, st) = plan_pairwise(net, &la, &lb, ia, ib, &keep)?;
+            let (rlegs, st) = plan_pairwise(net, &la, &lb, ia, ib, slots.len(), &keep)?;
             for &l in &rlegs {
                 *refcount.get_mut(&l).unwrap() += 1;
             }
@@ -134,6 +322,8 @@ impl CompiledContraction {
             return Err(format!("路径不完整：剩余 {} 个张量", alive.len()));
         }
         let mut legs = slots[alive[0]].take().unwrap();
+        let final_input_legs = legs.clone();
+        let final_input_shape: Vec<usize> = legs.iter().map(|&l| net.dim(l)).collect();
 
         // Reduce residual legs one at a time.
         let mut final_sum = Vec::new();
@@ -157,20 +347,18 @@ impl CompiledContraction {
             .collect();
         let final_shape: Vec<usize> = net.output.iter().map(|&l| net.dim(l)).collect();
 
-        let input_shapes: Vec<Vec<usize>> = net
-            .inputs
-            .iter()
-            .map(|legs| legs.iter().map(|&l| net.dim(l)).collect())
-            .collect();
         Ok(CompiledContraction {
             n_inputs: n,
-            input_shapes,
             input_prep,
             steps,
-            final_slot: alive[0],
-            final_sum,
-            final_perm,
-            final_shape,
+            finalize: CompiledFinalize {
+                slot: alive[0],
+                input_legs: final_input_legs,
+                input_shape: final_input_shape,
+                sum: final_sum,
+                perm: final_perm,
+                output_shape: final_shape,
+            },
             log10_flops: stats.log10_flops,
             // Report the live-set peak, not only the largest intermediate.
             log2_peak_size: stats.log2_peak_size,
@@ -205,46 +393,22 @@ impl CompiledContraction {
             ));
         }
         // Apply the same shape contract as contract_network before GEMM.
-        for (i, (want, t)) in self.input_shapes.iter().zip(tensors).enumerate() {
-            t.validate_layout()
-                .map_err(|e| format!("张量 {i} 布局非法: {e}"))?;
-            if *want != t.shape {
-                return Err(format!(
-                    "张量 {i} shape {:?} 与编译计划期望维度 {:?} 不符",
-                    t.shape, want
-                ));
-            }
+        for (i, (prep, t)) in self.input_prep.iter().zip(tensors).enumerate() {
+            check_operand(t, &prep.input_shape, &format!("张量 {i}"))?;
         }
         let mut slots: Vec<Option<DenseTensor<T>>> =
             Vec::with_capacity(self.n_inputs + self.steps.len());
         // Apply input traces and diagonal extraction.
-        for (i, prep) in self.input_prep.iter().enumerate() {
-            let mut t = tensors[i].clone();
-            for &(ax_i, ax_j, is_diag) in &prep.traces {
-                t = if is_diag {
-                    t.diag_pair(ax_i, ax_j)
-                } else {
-                    t.trace_pair(ax_i, ax_j)
-                };
-            }
-            slots.push(Some(t));
+        for (prep, t) in self.input_prep.iter().zip(tensors) {
+            slots.push(Some(prep.apply(t.clone())));
         }
 
         let mut exponent = 0.0f64;
         for st in &self.steps {
-            let mut a = slots[st.li].take().ok_or("计划引用了已消费的张量")?;
-            let mut b = slots[st.ri].take().ok_or("计划引用了已消费的张量")?;
-            for &ax in &st.sum_a {
-                a = a.sum_axis(ax);
-            }
-            for &ax in &st.sum_b {
-                b = b.sum_axis(ax);
-            }
-            let a = a.permute(&st.a_perm);
-            let b = b.permute(&st.b_perm);
-
-            let (bt, m, k, n2) = (st.bt, st.m, st.k, st.n);
-            let mut c = checked_batch_gemm(&a, &b, bt, m, k, n2)?;
+            let a = slots[st.li].take().ok_or("计划引用了已消费的张量")?;
+            let b = slots[st.ri].take().ok_or("计划引用了已消费的张量")?;
+            let mut c = st.gemm(&a, &b)?;
+            drop((a, b));
             if strip {
                 // Normalize by the largest magnitude and accumulate its exponent.
                 let mut fmax = 0.0f64;
@@ -264,6 +428,7 @@ impl CompiledContraction {
                     }
                 }
             }
+            debug_assert_eq!(slots.len(), st.out);
             slots.push(Some(
                 DenseTensor::try_from_data(st.result_shape.clone(), c)
                     .map_err(|e| format!("预编译 GEMM 结果布局非法: {e}"))?,
@@ -271,13 +436,8 @@ impl CompiledContraction {
         }
 
         // Retrieve the final slot selected at compile time.
-        let mut t = slots[self.final_slot].take().ok_or("收尾张量缺失")?;
-        for &ax in &self.final_sum {
-            t = t.sum_axis(ax);
-        }
-        let t = t.permute(&self.final_perm);
-        debug_assert_eq!(t.shape, self.final_shape);
-        Ok((t, exponent))
+        let t = slots[self.finalize.slot].take().ok_or("收尾张量缺失")?;
+        Ok((self.finalize.apply(t), exponent))
     }
 }
 
@@ -324,8 +484,9 @@ fn plan_pairwise(
     lb: &[LegId],
     li: usize,
     ri: usize,
+    out: usize,
     keep: &dyn Fn(LegId) -> bool,
-) -> Result<(Vec<LegId>, Step), String> {
+) -> Result<(Vec<LegId>, CompiledPairContraction), String> {
     let set_a: HashSet<LegId> = la.iter().copied().collect();
     let set_b: HashSet<LegId> = lb.iter().copied().collect();
 
@@ -413,11 +574,20 @@ fn plan_pairwise(
         .map(|&l| net.try_dim(l))
         .collect::<Result<_, _>>()?;
 
+    let shape_of = |legs: &[LegId]| -> Result<Vec<usize>, String> {
+        legs.iter().map(|&l| net.try_dim(l)).collect()
+    };
     Ok((
-        result_legs,
-        Step {
+        result_legs.clone(),
+        CompiledPairContraction {
             li,
             ri,
+            out,
+            left_shape: shape_of(la)?,
+            right_shape: shape_of(lb)?,
+            left_legs: la.to_vec(),
+            right_legs: lb.to_vec(),
+            result_legs,
             sum_a,
             sum_b,
             a_perm,
