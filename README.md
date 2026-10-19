@@ -117,12 +117,16 @@ cd ArcTN
 cargo run --release --example contraction
 ```
 
-### Running a plan step by step
+<a id="source-and-availability"></a>
+<a id="engine-library"></a>
 
-If every pair contraction needs to go on your own autograd tape, run
-`CompiledContraction` one stage at a time instead of calling `execute`. Each step
-knows its slots, legs, shapes and GEMM sizes, and `step.execute(left, right)`
-contracts just that pair. The result is bit-identical to `execute`.
+This repository provides source for standalone algorithms, slicing, numerical execution, and calling interfaces. The Light/Heavy engine is proprietary and included in complete wheels; source builds require [separate engine configuration](docs/engine-interface.md). For Python source builds, see the [build instructions (Chinese)](pybind/README.md#source-installation).
+
+### Run a compiled plan step by step
+
+To record each pairwise contraction in your own autograd graph, run a `CompiledContraction` step by step instead of calling `execute`. In the example below, `net` is a `TensorNetwork`, `path` is an SSA path (for example, from `arctn::greedy`), and `tensors` holds the input tensors in the order of `net.inputs`.
+
+Slot `i` holds input `i` after preprocessing, and step `s` writes its result to slot `n_inputs + s`. Each step also reports its legs, shapes, and GEMM dimensions. `step.execute(left, right)` contracts only that pair; running all steps in order gives exactly the same result as `execute`.
 
 ```rust
 use arctn::{CompiledContraction, DenseTensor};
@@ -137,17 +141,12 @@ let mut slots: Vec<Option<DenseTensor<f64>>> = compiled
 for step in compiled.pair_steps() {
     let left = slots[step.left_slot()].take().unwrap();
     let right = slots[step.right_slot()].take().unwrap();
-    // record step.left_legs(), right_legs(), result_legs() here
+    // Record step.left_legs(), step.right_legs(), and step.result_legs() here.
     slots.push(Some(step.execute(&left, &right)?));
 }
 let fin = compiled.finalize();
 let result = fin.execute(slots[fin.slot()].as_ref().unwrap())?;
 ```
-
-<a id="source-and-availability"></a>
-<a id="engine-library"></a>
-
-This repository provides source for standalone algorithms, slicing, numerical execution, and calling interfaces. The Light/Heavy engine is proprietary and included in complete wheels; source builds require [separate engine configuration](docs/engine-interface.md). For Python source builds, see the [build instructions (Chinese)](pybind/README.md#source-installation).
 
 <a id="license"></a>
 

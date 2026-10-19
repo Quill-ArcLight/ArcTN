@@ -117,11 +117,16 @@ cd ArcTN
 cargo run --release --example contraction
 ```
 
-### 逐步执行编译好的计划
+<a id="source-and-availability"></a>
+<a id="engine-library"></a>
 
-如果要把每一步成对收缩记进自己的自动微分图，可以不调用整网 `execute`，按阶段自己跑。
-每一步都能查到槽位、腿、形状和 GEMM 尺寸，`step.execute(left, right)` 只收缩这一对张量，
-结果和整网 `execute` 逐位一致。
+本仓库公开独立算法、切片、数值执行和调用接口。Light/Heavy 引擎保持闭源，完整 wheel 已包含引擎；自行从源码构建时需[单独配置引擎](docs/engine-interface.md)。Python 源码安装见[构建说明](pybind/README.md#source-installation)。
+
+### 逐步执行编译后的计划
+
+需要把每一次成对收缩记入自己的自动微分图时，可以不直接调用 `execute`，而是逐步执行 `CompiledContraction`。下例中，`net` 是 `TensorNetwork`，`path` 是 SSA 路径（例如由 `arctn::greedy` 得到），`tensors` 按 `net.inputs` 的顺序存放输入张量。
+
+槽位 `i` 存放预处理后的第 `i` 个输入，第 `s` 步的结果写入槽位 `n_inputs + s`。每一步还提供腿、形状和 GEMM 维度。`step.execute(left, right)` 只收缩这一对张量；按顺序执行所有步骤，结果与 `execute` 完全一致。
 
 ```rust
 use arctn::{CompiledContraction, DenseTensor};
@@ -136,17 +141,12 @@ let mut slots: Vec<Option<DenseTensor<f64>>> = compiled
 for step in compiled.pair_steps() {
     let left = slots[step.left_slot()].take().unwrap();
     let right = slots[step.right_slot()].take().unwrap();
-    // 在这里把 step.left_legs()、right_legs()、result_legs() 记进计算图
+    // 在这里记录 step.left_legs()、step.right_legs() 和 step.result_legs()。
     slots.push(Some(step.execute(&left, &right)?));
 }
 let fin = compiled.finalize();
 let result = fin.execute(slots[fin.slot()].as_ref().unwrap())?;
 ```
-
-<a id="source-and-availability"></a>
-<a id="engine-library"></a>
-
-本仓库公开独立算法、切片、数值执行和调用接口。Light/Heavy 引擎保持闭源，完整 wheel 已包含引擎；自行从源码构建时需[单独配置引擎](docs/engine-interface.md)。Python 源码安装见[构建说明](pybind/README.md#source-installation)。
 
 <a id="license"></a>
 
