@@ -1,6 +1,6 @@
 [package]
 name = "arctn"
-version = "1.0.1"
+version = "1.0.0"
 autobins = false
 publish = false
 edition = "2021"

@@ -1,6 +1,6 @@
 [package]
 name = "arctn-py"
-version = "1.0.1"
+version = "1.0.0"
 edition = "2021"
 authors = ["Zhengyi Liu"]
 description = "Python bindings for the ArcTN tensor-network contraction library"
@@ -18,7 +18,7 @@ name = "arctn_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-arctn = { path = "..", version = "=1.0.1", default-features = false }
+arctn = { path = "..", version = "=1.0.0", default-features = false }
 pyo3 = { version = "0.29", features = ["extension-module"] }
 # NumPy conversion for DenseTensor execution.
 numpy = "0.29"

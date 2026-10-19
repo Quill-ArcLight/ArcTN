@@ -4,7 +4,7 @@
 
 ArcTN 是一个用 Rust 编写、提供 Python 接口的张量网络库，用于搜索收缩路径、切片和数值收缩，也可接入 Quimb、Cotengra 和 opt_einsum。
 
-[完整安装包](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.1) · [中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
+[完整安装包](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0) · [中文文档](https://quantumquill.arclightquantum.com/docs/arctn/index.html)
 
 <a id="algorithms-and-execution"></a>
 
@@ -24,7 +24,7 @@ ArcTN 是一个用 Rust 编写、提供 Python 接口的张量网络库，用于
 
 ### 安装
 
-从 [ArcTN 1.0.1 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.1)的 **Assets** 中，下载一份与系统和 Python 版本匹配的 `.whl`。完整包已包含 Light/Heavy 引擎，无需安装 Rust 或手动配置动态库。
+从 [ArcTN 1.0.0 下载页](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0)的 **Assets** 中，下载一份与系统和 Python 版本匹配的 `.whl`。完整包已包含 Light/Heavy 引擎，无需安装 Rust 或手动配置动态库。
 
 | 系统与处理器 | 文件名中的平台标记 |
 | --- | --- |
@@ -41,7 +41,7 @@ ArcTN 是一个用 Rust 编写、提供 Python 接口的张量网络库，用于
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --only-binary=arctn --find-links=. arctn==1.0.1
+python -m pip install --only-binary=arctn --find-links=. arctn==1.0.0
 ```
 
 Windows PowerShell 将第二行替换为 `.venv\Scripts\Activate.ps1`。NumPy 等依赖会自动安装，以下示例在同一环境中运行。

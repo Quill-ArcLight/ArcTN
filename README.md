@@ -4,7 +4,7 @@
 
 ArcTN is a tensor network library written in Rust with a Python interface for contraction path search, slicing, and numerical contraction. It also integrates with Quimb, Cotengra, and opt_einsum.
 
-[Complete installation packages](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.1) · [Documentation](https://quantumquill.arclightquantum.com/en/docs/arctn/index.html)
+[Complete installation packages](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0) · [Documentation](https://quantumquill.arclightquantum.com/en/docs/arctn/index.html)
 
 <a id="algorithms-and-execution"></a>
 
@@ -24,7 +24,7 @@ ArcTN is a tensor network library written in Rust with a Python interface for co
 
 ### Installation
 
-Under **Assets** on the [ArcTN 1.0.1 release page](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.1), download one `.whl` matching your system and Python version. Complete wheels include the Light/Heavy engine; you do not need Rust or manual shared-library configuration.
+Under **Assets** on the [ArcTN 1.0.0 release page](https://github.com/Quill-ArcLight/ArcTN/releases/tag/v1.0.0), download one `.whl` matching your system and Python version. Complete wheels include the Light/Heavy engine; you do not need Rust or manual shared-library configuration.
 
 | System and processor | Platform text in the filename |
 | --- | --- |
@@ -41,7 +41,7 @@ Open a terminal in the directory containing the downloaded wheel, then create an
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --only-binary=arctn --find-links=. arctn==1.0.1
+python -m pip install --only-binary=arctn --find-links=. arctn==1.0.0
 ```
 
 In Windows PowerShell, replace the second line with `.venv\Scripts\Activate.ps1`. Dependencies such as NumPy are installed automatically. Run the examples below in this environment.
