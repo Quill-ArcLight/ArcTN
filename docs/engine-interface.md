@@ -125,5 +125,5 @@ engine's reported search time.
 
 Single-process execution sums internal slices within each output block and
 assembles the blocks in the declared output-axis order. The per-slice target
-does not limit storage for the complete output. MPI execution still supports
-internal-index slicing only.
+does not limit storage for the complete output. `tnmpi` runs the same plans;
+every rank keeps the complete output and the ranks sum it with Allreduce.

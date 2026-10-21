@@ -52,7 +52,13 @@ fn checked_fixture_bytes<T: Scalar + PartialEq>(
         .chunks_exact(values.len() / 2)
         .map(|data| DenseTensor::try_from_data(shape.clone(), data.to_vec()).unwrap())
         .collect::<Vec<_>>();
-    for sliced in [vec![], vec![if scalar_output { 0 } else { 1 }]] {
+    let slicings = if scalar_output {
+        vec![vec![], vec![0]]
+    } else {
+        // Unsliced, internal-index, output-index and mixed slicing.
+        vec![vec![], vec![1], vec![2, 0], vec![0, 1]]
+    };
+    for sliced in slicings {
         let result = contract_network_sliced(&network, &tensors, &vec![(0, 1)], &sliced).unwrap();
         assert_eq!(result.data(), expected.as_slice());
         assert_eq!(
@@ -162,16 +168,11 @@ impl Drop for MpiFixtureDirectory {
     }
 }
 
-fn write_mpi_plan(directory: &Path, scalar_output: bool, sliced: bool) -> PathBuf {
+fn write_mpi_plan(directory: &Path, scalar_output: bool, sliced_legs: &[usize]) -> PathBuf {
     let network = dtype_fixture_network(scalar_output);
     let labels = (0..network.size_dict.len())
         .map(|id| id.to_string())
         .collect::<Vec<_>>();
-    let sliced_legs = if sliced {
-        vec![if scalar_output { 0 } else { 1 }]
-    } else {
-        vec![]
-    };
     let record = complete_execution_plan_v2(
         &network,
         &labels,
@@ -182,7 +183,11 @@ fn write_mpi_plan(directory: &Path, scalar_output: bool, sliced: bool) -> PathBu
         }),
     )
     .unwrap();
-    let path = directory.join(format!("scalar-{scalar_output}-sliced-{sliced}.json"));
+    let legs: Vec<String> = sliced_legs.iter().map(|leg| leg.to_string()).collect();
+    let path = directory.join(format!(
+        "scalar-{scalar_output}-sliced-{}.json",
+        legs.join("-")
+    ));
     std::fs::write(&path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
     path
 }
@@ -220,7 +225,7 @@ fn assert_mpi_fixture(
     dtype: Option<&str>,
     ranks: usize,
     scalar_output: bool,
-    sliced: bool,
+    n_slices: usize,
 ) {
     let output = run_mpi_fixture(plan, data, dtype, ranks);
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -235,7 +240,7 @@ fn assert_mpi_fixture(
         .expect("rank 0 JSON summary");
     assert_eq!(summary["dtype"], dtype.unwrap_or("f64"));
     assert_eq!(summary["ranks"], ranks);
-    assert_eq!(summary["n_slices"], if sliced { 2 } else { 1 });
+    assert_eq!(summary["n_slices"], n_slices);
     assert_eq!(
         summary["output_shape"],
         if scalar_output {
@@ -263,9 +268,11 @@ fn mpi_dtypes_match_known_results() {
         std::env::temp_dir().join(format!("arctn-mpi-dtypes-{}-{unique}", std::process::id())),
     );
     std::fs::create_dir(&directory.0).unwrap();
-    let sliced_matrix = write_mpi_plan(&directory.0, false, true);
-    let unsliced_matrix = write_mpi_plan(&directory.0, false, false);
-    let sliced_scalar = write_mpi_plan(&directory.0, true, true);
+    let sliced_matrix = write_mpi_plan(&directory.0, false, &[1]);
+    let output_matrix = write_mpi_plan(&directory.0, false, &[2, 0]);
+    let mixed_matrix = write_mpi_plan(&directory.0, false, &[0, 1]);
+    let unsliced_matrix = write_mpi_plan(&directory.0, false, &[]);
+    let sliced_scalar = write_mpi_plan(&directory.0, true, &[0]);
     for dtype in ["f32", "f64", "complex64", "complex128"] {
         let matrix_data = directory.0.join(format!("matrix-{dtype}.bin"));
         // This verifies the exact same fixture against hand-calculated values
@@ -274,22 +281,18 @@ fn mpi_dtypes_match_known_results() {
         std::fs::write(&matrix_data, &bytes).unwrap();
         for ranks in [1, 2, 4] {
             // There are only two slices: four ranks exercise empty ranges.
-            assert_mpi_fixture(
-                &sliced_matrix,
-                &matrix_data,
-                Some(dtype),
-                ranks,
-                false,
-                true,
-            );
+            assert_mpi_fixture(&sliced_matrix, &matrix_data, Some(dtype), ranks, false, 2);
+            // Ranks hold different output blocks of these four-slice plans.
+            assert_mpi_fixture(&output_matrix, &matrix_data, Some(dtype), ranks, false, 4);
+            assert_mpi_fixture(&mixed_matrix, &matrix_data, Some(dtype), ranks, false, 4);
         }
-        assert_mpi_fixture(&unsliced_matrix, &matrix_data, Some(dtype), 2, false, false);
+        assert_mpi_fixture(&unsliced_matrix, &matrix_data, Some(dtype), 2, false, 1);
         let scalar_data = directory.0.join(format!("scalar-{dtype}.bin"));
         std::fs::write(&scalar_data, dtype_fixture_bytes(dtype, true)).unwrap();
-        assert_mpi_fixture(&sliced_scalar, &scalar_data, Some(dtype), 2, true, true);
+        assert_mpi_fixture(&sliced_scalar, &scalar_data, Some(dtype), 2, true, 2);
 
         if dtype == "f64" {
-            assert_mpi_fixture(&sliced_matrix, &matrix_data, None, 2, false, true);
+            assert_mpi_fixture(&sliced_matrix, &matrix_data, None, 2, false, 2);
         }
         // Test both a partial component and a whole missing/extra element.
         let invalid = match dtype {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Run plans with output-index slices in `tnmpi`. Each rank adds its slice
+  results into a zeroed complete output, with output-index slices placed at
+  their blocks, and the existing Allreduce sum assembles the result. Every
+  rank still stores the complete output.
 - Allow running `CompiledContraction` one stage at a time through
   `input_preps()`, `pair_steps()` and `finalize()`. A pair step knows its slots,
   legs, shapes and GEMM sizes, and `execute(left, right)` contracts just that
@@ -24,8 +28,7 @@
   default remains internal-index slicing only. Single-process execution sums
   internal slices within output blocks and assembles the complete output in
   its declared axis order. Saved plans support the same execution behavior.
-  The per-slice size target does not limit complete-output storage; MPI remains
-  internal-index only.
+  The per-slice size target does not limit complete-output storage.
 - Keep compatibility with ABI 1 Light/Heavy engines: when output-index slicing
   is enabled, the public adapter requests an unsliced order and applies the
   public slicing implementation locally, without changing the ABI 1 request format.

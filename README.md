@@ -103,7 +103,7 @@ Choose the function for the result you need; you do not need to call them in seq
 
 `arctn_schedule` and `arctn_contract` also accept `target_size`, an upper limit on the number of elements in each intermediate tensor within a slice, rather than on total process memory. To allow output-index slicing, also set `allow_output_slicing=True`; execution still returns the complete output.
 
-See the [Python interface guide (Chinese)](pybind/README.md#interfaces) for other parameters, path reuse, and Quimb examples. See the [MPI guide (Chinese)](docs/mpi.md) for parallel execution; MPI currently supports internal-index slicing only.
+See the [Python interface guide (Chinese)](pybind/README.md#interfaces) for other parameters, path reuse, and Quimb examples. See the [MPI guide (Chinese)](docs/mpi.md) for parallel execution; MPI runs plans with internal-index and output-index slices.
 
 <a id="rust"></a>
 

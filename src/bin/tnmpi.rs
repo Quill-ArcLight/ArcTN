@@ -1,7 +1,9 @@
 //! Execute a saved contraction path and its slices across MPI ranks.
 //!
 //! Rank zero loads the execution plan; ranks evaluate disjoint slices and sum
-//! their outputs with Allreduce. Path optimization happens before this program.
+//! their outputs with Allreduce. Every rank adds its slices into a zeroed
+//! complete output, so an output-index slice only fills its own block and the
+//! sum puts the blocks together. Path optimization happens before this program.
 
 use arctn::{
     contract_network, contract_network_sliced, parse_embedded_execution_plan,
@@ -205,18 +207,16 @@ fn checked_product(dims: impl IntoIterator<Item = usize>) -> Result<usize, Strin
     })
 }
 
+/// Network contracted for one slice. Sliced output legs leave the output too,
+/// so each slice returns only its own output block.
 fn sliced_network(net: &TensorNetwork, sliced: &[LegId]) -> Result<TensorNetwork, String> {
     arctn::slice::validate_slice_legs(net, sliced)?;
-    // This executor reduces complete slice outputs elementwise.
-    // Assembly of output blocks across MPI ranks is not implemented here.
-    if sliced.iter().any(|leg| net.output.contains(leg)) {
-        return Err("tnmpi supports internal-index slicing only; output-index slicing requires single-process execution".into());
-    }
     let mut sub = net.clone();
     for &leg in sliced {
         for indices in &mut sub.inputs {
             indices.retain(|&index| index != leg);
         }
+        sub.output.retain(|&index| index != leg);
         sub.size_dict.remove(&leg);
     }
     Ok(sub)
@@ -283,8 +283,10 @@ fn slice_range(count: usize, ranks: usize, rank: usize) -> (usize, usize) {
     (begin, begin + chunk + usize::from(rank < extra))
 }
 
-/// Contract and accumulate slices in linear range `[begin, end)`.
-/// This mirrors `contract_network_sliced`; the last sliced leg varies fastest.
+/// Contract slices in linear range `[begin, end)` and add them into a zeroed
+/// complete output. This mirrors `contract_network_sliced`; the last sliced leg
+/// varies fastest. Internal-index slices add up in place, and an output-index
+/// slice is added at its block, so the other blocks stay zero for Allreduce.
 fn contract_slice_range<T: Scalar>(
     net: &TensorNetwork,
     tensors: &[DenseTensor<T>],
@@ -309,7 +311,27 @@ fn contract_slice_range<T: Scalar>(
             "切片范围 [{begin}, {end}) 超出有效范围 [0, {n_slices})"
         ));
     }
-    let mut result: Option<DenseTensor<T>> = None;
+    let mut total = DenseTensor::try_zeros(net.output.iter().map(|&l| net.dim(l)).collect())?;
+    let strides = total.strides();
+    // A sliced output leg shifts the block by its stride; internal legs do not
+    // move it. Output axes after the last sliced one stay contiguous, so each
+    // block is added in runs of that length.
+    let last_sliced_axis = net
+        .output
+        .iter()
+        .rposition(|leg| sliced_pos.contains_key(leg));
+    let mut leg_strides = vec![0usize; sliced.len()];
+    let mut outer_axes = Vec::new();
+    let mut run = 1usize;
+    for (axis, leg) in net.output.iter().enumerate() {
+        if let Some(&k) = sliced_pos.get(leg) {
+            leg_strides[k] = strides[axis];
+        } else if last_sliced_axis.is_some_and(|last| axis < last) {
+            outer_axes.push((net.dim(*leg), strides[axis]));
+        } else {
+            run *= net.dim(*leg);
+        }
+    }
     for lin in begin..end {
         // Decode the linear id as mixed-radix indices, last dimension fastest.
         let mut idx = vec![0usize; dims.len()];
@@ -334,16 +356,23 @@ fn contract_slice_range<T: Scalar>(
             })
             .collect();
         let part = contract_network(&sub, sliced_tensors, path)?;
-        match &mut result {
-            None => result = Some(part),
-            Some(acc) => {
-                for (a, b) in acc.data_mut().iter_mut().zip(part.data()) {
-                    *a += *b;
-                }
+        let base: usize = idx.iter().zip(&leg_strides).map(|(&i, &s)| i * s).sum();
+        for (n, chunk) in part.data().chunks(run).enumerate() {
+            let mut rem = n;
+            let mut offset = base;
+            for &(dim, stride) in outer_axes.iter().rev() {
+                offset += (rem % dim) * stride;
+                rem /= dim;
+            }
+            for (a, b) in total.data_mut()[offset..offset + chunk.len()]
+                .iter_mut()
+                .zip(chunk)
+            {
+                *a += *b;
             }
         }
     }
-    result.ok_or_else(|| "空切片范围".to_string())
+    Ok(total)
 }
 
 fn check_result<T: Scalar>(
@@ -498,11 +527,60 @@ mod tests {
     }
 
     #[test]
-    fn mpi_rejects_output_slices_before_reduction() {
+    fn slice_network_drops_sliced_output_legs() {
         let net = matrix_network();
-        let error = sliced_network(&net, &[0]).unwrap_err();
-        assert!(error.contains("internal-index slicing only"), "{error}");
-        assert!(sliced_network(&net, &[1]).is_ok());
+        let sub = sliced_network(&net, &[2, 1]).unwrap();
+        assert_eq!(sub.inputs, vec![vec![0], vec![]]);
+        assert_eq!(sub.output, vec![0]);
+        assert_eq!(sub.size_dict.len(), 1);
+        assert!(sliced_network(&net, &[0, 0]).is_err());
+    }
+
+    #[test]
+    fn output_blocks_land_in_place_for_every_axis_position() {
+        // Sliced output legs at the front, middle and back of a three-axis
+        // output, alone and together with the internal legs 3 and 4.
+        let net = TensorNetwork {
+            name: "mpi-three-axis-output".into(),
+            inputs: vec![vec![0, 3], vec![3, 1, 4], vec![4, 2]],
+            output: vec![0, 1, 2],
+            size_dict: [(0, 2), (1, 3), (2, 2), (3, 2), (4, 3)]
+                .into_iter()
+                .collect(),
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(7);
+        let tensors: Vec<DenseTensor<f64>> = net
+            .inputs
+            .iter()
+            .map(|legs| DenseTensor::random(legs.iter().map(|&l| net.dim(l)).collect(), &mut rng))
+            .collect();
+        let path = vec![(0, 1), (3, 2)];
+        let reference = contract_network(&net, tensors.clone(), &path).unwrap();
+        for sliced in [
+            vec![1],
+            vec![2, 0],
+            vec![1, 3],
+            vec![4, 1, 0, 3],
+            vec![0, 1, 2],
+        ] {
+            let n_slices = checked_product(sliced.iter().map(|&l| net.dim(l))).unwrap();
+            let mut total = vec![0f64; reference.numel()];
+            for rank in 0..4 {
+                let (begin, end) = slice_range(n_slices, 4, rank);
+                if begin == end {
+                    continue;
+                }
+                let part =
+                    contract_slice_range(&net, &tensors, &path, &sliced, begin, end).unwrap();
+                assert_eq!(part.shape(), reference.shape());
+                for (a, b) in total.iter_mut().zip(part.data()) {
+                    *a += *b;
+                }
+            }
+            let total = DenseTensor::try_from_data(reference.shape().to_vec(), total).unwrap();
+            let diff = reference.max_abs_diff(&total);
+            assert!(diff < 1e-12, "{sliced:?}: max_abs_diff={diff}");
+        }
     }
 
     fn load_matrix_bytes<T: Scalar>(
@@ -555,8 +633,22 @@ mod tests {
         }
         let net = matrix_network();
         let path = vec![(0, 1)];
-        for sliced in [vec![], vec![1]] {
-            let n_slices = if sliced.is_empty() { 1 } else { 2 };
+        // Internal, output and mixed slices; three ranks leave some ranges empty.
+        for sliced in [vec![], vec![1], vec![0], vec![2, 0], vec![1, 2, 0]] {
+            let n_slices = 1 << sliced.len();
+            let mut combined = vec![T::zero(); 4];
+            for rank in 0..3 {
+                let (begin, end) = slice_range(n_slices, 3, rank);
+                if begin == end {
+                    continue;
+                }
+                let part =
+                    contract_slice_range(&net, &tensors, &path, &sliced, begin, end).unwrap();
+                for (a, b) in combined.iter_mut().zip(part.data()) {
+                    *a += *b;
+                }
+            }
+            assert_eq!(combined, expected, "{sliced:?}");
             let mut total =
                 contract_slice_range(&net, &tensors, &path, &sliced, 0, n_slices).unwrap();
             assert_eq!(total.shape(), &[2, 2]);
@@ -585,15 +677,6 @@ mod tests {
                 );
             }
         }
-        let first = contract_slice_range(&net, &tensors, &path, &[1], 0, 1).unwrap();
-        let second = contract_slice_range(&net, &tensors, &path, &[1], 1, 2).unwrap();
-        let combined: Vec<T> = first
-            .data()
-            .iter()
-            .zip(second.data())
-            .map(|(&a, &b)| a + b)
-            .collect();
-        assert_eq!(combined, expected);
     }
 
     #[test]

@@ -103,7 +103,7 @@ print(result)
 
 `arctn_schedule` 和 `arctn_contract` 还支持 `target_size`，用于设置每个切片中单个中间张量的元素数上限，不是整个程序的内存上限。需要对输出索引切片时，同时设置 `allow_output_slicing=True`；执行后仍返回完整输出。
 
-其他参数、路径复用和 Quimb 接入示例见 [Python 接口说明](pybind/README.md#interfaces)。MPI 的安装和使用见 [MPI 文档](docs/mpi.md)；目前仅支持内部索引切片。
+其他参数、路径复用和 Quimb 接入示例见 [Python 接口说明](pybind/README.md#interfaces)。MPI 的安装和使用见 [MPI 文档](docs/mpi.md)；内部索引切片和输出索引切片都可以用 MPI 执行。
 
 <a id="rust"></a>
 
