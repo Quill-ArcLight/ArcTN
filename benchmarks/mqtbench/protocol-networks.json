@@ -1,0 +1,50 @@
+{
+ "name": "MQT Bench networks",
+ "source": {
+  "archive": "MQTBench_all.zip",
+  "url": "https://www.cda.cit.tum.de/mqtbench/get_pre_gen",
+  "version": "MQT Bench v1.1.9 pre-generated archive (files generated with MQT Bench 1.1.0 and Qiskit 1.0.2)",
+  "members": 75710
+ },
+ "circuit_selection": {
+  "level": "indep",
+  "compiler": "qiskit",
+  "qubit_grid": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130],
+  "every_qubit_count": ["ae", "dj", "ghz", "graphstate", "qft", "qftentangled", "qnn", "qpeexact", "qpeinexact",
+                        "random", "realamprandom", "su2random", "twolocalrandom", "wstate"],
+  "fixed_sizes": ["groundstate_small", "groundstate_medium", "groundstate_large", "grover-noancilla",
+                  "grover-v-chain", "portfolioqaoa", "portfoliovqe", "pricingcall", "pricingput", "qaoa",
+                  "qwalk-noancilla", "qwalk-v-chain", "routing", "shor_15_4", "shor_9_4", "tsp", "vqe"],
+  "rule": "families at every qubit count: files whose qubit count is on qubit_grid; families at fixed sizes: all files. Only file names are used."
+ },
+ "preprocessing": {
+  "parser": "quimb 1.15.0 Circuit.from_openqasm2_str after removing final measurements, barriers and classical registers",
+  "non_unitary": "files with a reset, or with a measurement followed by a gate on the same qubit, are excluded",
+  "dtype": "complex128",
+  "simplify_sequence": "ADCRS",
+  "simplify_atol": 1e-12,
+  "simplify_equalize_norms": true,
+  "zero_value_handling": "if norm equalization divides by zero (the task value is exactly zero), the network is rebuilt without it",
+  "unsupported_gate_definitions": "rzz, rxx and ch are written as exact decompositions; rccx uses its qelib1.inc definition",
+  "conversion_time_limit_seconds": 3600
+ },
+ "tasks": {
+  "amplitude": {
+   "definition": "<0^n| C |0^n>"
+  },
+  "expectation_z": {
+   "definition": "<0^n| C^dag Z_c C |0^n>, c = floor((n-1)/2), reverse light cone only",
+   "min_qubits": 1
+  },
+  "expectation_zz": {
+   "definition": "<0^n| C^dag Z_c Z_(c+1) C |0^n>, c = floor((n-1)/2), reverse light cone only",
+   "min_qubits": 2
+  },
+  "state": {
+   "definition": "all qubits open for n <= 28; otherwise qubits round(i (n-1) / 19), i = 0..19, open and the others fixed to |0>",
+   "full_state_max_qubits": 28,
+   "open_qubits_otherwise": 20
+  }
+ },
+ "planned_networks": "networks with 3 to 4999 tensors after simplification; at most two tensors need no search, 5000 or more are not planned"
+}

@@ -1,0 +1,33 @@
+{
+ "name": "QC32 planning",
+ "objective": "FLOPs",
+ "seeds": [0, 1, 2, 3, 4],
+ "resources": {
+  "physical_cores_per_run": 8,
+  "max_concurrent_runs": 12,
+  "max_concurrent_tnco_runs": 8,
+  "run_time_limit_seconds": 3600,
+  "min_available_memory_bytes": 0
+ },
+ "versions": {
+  "arctn": "1.0.0",
+  "cotengra": "0.8.2",
+  "omeco": "0.2.6",
+  "tnco": "0.4.0"
+ },
+ "configurations": [
+  {"id": "arctn-light-rate-on", "library": "ArcTN", "preset": "light", "rate_enabled": true, "max_time": 3600},
+  {"id": "arctn-heavy-rate-on", "library": "ArcTN", "preset": "heavy", "rate_enabled": true, "max_time": 3600},
+  {"id": "cotengra-auto-cmaes", "library": "Cotengra", "optimizer": "AutoOptimizer",
+   "kwargs": {"optlib": "cmaes", "minimize": "flops", "max_repeats": 128}},
+  {"id": "cotengra-autohq-optuna", "library": "Cotengra", "optimizer": "AutoHQOptimizer",
+   "kwargs": {"optlib": "optuna", "minimize": "flops", "max_repeats": 128}},
+  {"id": "cotengra-hyper128-optuna", "library": "Cotengra", "optimizer": "HyperOptimizer",
+   "kwargs": {"methods": ["greedy", "kahypar"], "max_repeats": 128, "max_time": 3500.0,
+              "reconf_opts": {"subtree_size": 12}, "optlib": "optuna", "parallel": "auto",
+              "progbar": false, "minimize": "flops"}},
+  {"id": "omeco-treesa8", "library": "OMECO", "ntrials": 8, "niters": 50},
+  {"id": "google-tnco-sa8-flops", "library": "TNCO", "fuse": null},
+  {"id": "google-tnco-sa8-fuse4-flops", "library": "TNCO", "fuse": 4}
+ ]
+}

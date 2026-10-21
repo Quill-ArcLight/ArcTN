@@ -1,0 +1,172 @@
+{
+  "schema": "qc32-final-heavy-slicing-protocol",
+  "campaign_name": "qc32-final-heavy-slicing-comparison",
+  "claim_boundary": "A five-method QC32 slicing comparison. ArcTN fixed-tree post-search slicing and ArcTN dynamic slicing consume the exact same saved Heavy SSA path for each circuit and repeat. Cotengra post-search slicing, Cotengra Dynamic slicing and OMECO TreeSA8 plus TreeSASlicer8 are independent native-library baselines.",
+  "corpus": {
+    "schema": "einsum-quantum32-language-neutral-corpus-v1",
+    "directory": "corpus",
+    "instance_count": 32
+  },
+  "objective": {
+    "primary_quality_metric": "total_sliced_flops",
+    "lower_is_better": true,
+    "common_exact_replay": "n_slices * exact_per_slice_contraction_flops",
+    "gather_additions_included": false,
+    "read_write_and_combo64": "reporting_only",
+    "native_selection_boundary": "ArcTN Heavy path search and dynamic completed-round ranking use pure FLOPs. ArcTN fixed-tree leg choice is the library's deterministic target-feasibility heuristic and has no objective argument. Cotengra receives minimize='flops'. OMECO TreeSA is pure FLOPs, while TreeSASlicer uses its native FLOPs-directed target-space penalty. Common exact total sliced FLOPs is the reported comparison metric, not a claim that every native slicer ranks candidates by the identical formula."
+  },
+  "target": {
+    "table": "targets.json",
+    "base_target_elements": 67108864,
+    "base_target_width_log2": 26,
+    "effective_target_rule": "max(base_target_elements, output_elements)",
+    "meaning": "largest single intermediate tensor in one slice, measured in elements",
+    "not_equivalent_to": "process RSS or a complete execution memory limit",
+    "complex64_single_tensor_reference_bytes": 536870912,
+    "complex128_single_tensor_reference_bytes": 1073741824
+  },
+  "repeat_ordinals": [0, 1, 2, 3, 4],
+  "expected_cell_count": 800,
+  "resources": {
+    "physical_cores_per_cell": 8,
+    "maximum_concurrent_cells": 12,
+    "maximum_allocated_physical_cores": 96,
+    "cooperative_planner_seconds_for_supported_methods": 3500,
+    "methods_without_public_cooperative_timeout": [
+      "arctn-heavy-fixed-tree-post-slicing",
+      "arctn-heavy-dynamic-slicing",
+      "omeco-treesa8-treesaslicer8"
+    ],
+    "hard_wall_seconds_per_cell": 3600,
+    "resource_sample_interval_seconds": 0.5,
+    "numeric_library_threads": 1
+  },
+  "queue": {
+    "policy": "method-major global work-conserving queue",
+    "barrier_between_methods": false,
+    "description": "The fixed-tree ArcTN row is queued first and atomically saves one Heavy path for every circuit and repeat. The following ArcTN dynamic row must load that exact path. Whenever one eight-core slot is released, the next pending cell starts immediately."
+  },
+  "shared_heavy_path": {
+    "producer_method": "arctn-heavy-fixed-tree-post-slicing",
+    "consumer_method": "arctn-heavy-dynamic-slicing",
+    "directory": "run/shared-heavy-paths",
+    "preset": "heavy",
+    "seed": "repeat_ordinal",
+    "rate_enabled": true,
+    "trial_cap": 192,
+    "expected_rate": 100000000.0,
+    "flops_weight": 1.0,
+    "read_write_weight": 0.0,
+    "max_time_seconds": 3500,
+    "path_equality_rule": "The consumer must load the producer artifact and the harness must report the same input SSA path. Dynamic slicing may change only its delivered output path."
+  },
+  "methods": [
+    {
+      "id": "arctn-heavy-fixed-tree-post-slicing",
+      "library": "ArcTN",
+      "entrypoint": "arctn.arctn_schedule(preset='heavy', target_size=None) followed by arctn::slice::find_slices_to_size",
+      "mechanism": "Run the frozen Heavy path search once, then choose sliced indices on that fixed contraction tree without changing the SSA path.",
+      "shared_heavy_path_role": "producer",
+      "slicing_mode": "fixed",
+      "changes_tree_during_slicing": false
+    },
+    {
+      "id": "arctn-heavy-dynamic-slicing",
+      "library": "ArcTN",
+      "entrypoint": "arctn::slice::slice_and_reconf_to_size_with_objective",
+      "mechanism": "Load the exact Heavy SSA path saved by the paired fixed-tree row; alternate slicing with subtree reconfiguration and rank completed rounds by total sliced FLOPs.",
+      "shared_heavy_path_role": "consumer",
+      "slicing_mode": "dynamic",
+      "changes_tree_during_slicing": true,
+      "rounds": 3,
+      "subtree_size": 8,
+      "flops_weight": 1.0,
+      "read_write_weight": 0.0
+    },
+    {
+      "id": "cotengra-autohq-post-search-slicing",
+      "library": "Cotengra",
+      "entrypoint": "cotengra.AutoHQOptimizer(...).search followed by tree.slice(target_size=..., minimize='flops')",
+      "mechanism": "Complete the unsliced AutoHQ path search first, then slice the returned contraction tree. The slicing stage does not run inside the hyper-optimization trials.",
+      "max_repeats": 128,
+      "optlib": "optuna",
+      "minimize": "flops",
+      "parallel_workers": 8,
+      "allow_outer": false,
+      "changes_tree_during_post_search_slicing": false
+    },
+    {
+      "id": "cotengra-hyper128-dynamic-slicing",
+      "library": "Cotengra",
+      "entrypoint": "cotengra.HyperOptimizer(..., slicing_reconf_opts={'target_size': ...}).search",
+      "mechanism": "Dynamic slicing during hyper-optimization; slice selection alternates with local contraction-tree reconfiguration.",
+      "max_repeats": 128,
+      "optlib": "optuna",
+      "minimize": "flops",
+      "parallel_workers": 8,
+      "allow_outer": false,
+      "slicing_reconfiguration_options": {
+        "target_size": "effective_target_elements",
+        "allow_outer": false
+      }
+    },
+    {
+      "id": "omeco-treesa8-treesaslicer8",
+      "library": "OMECO",
+      "entrypoint": "omeco.optimize_code(..., TreeSA(...)) followed by omeco.slice_code(..., TreeSASlicer(...))",
+      "initial_tree": {
+        "ntrials": 8,
+        "niters": 50,
+        "score": {
+          "tc_weight": 1.0,
+          "sc_weight": 0.0,
+          "rw_weight": 0.0,
+          "sc_target": 0.0
+        }
+      },
+      "slicer": {
+        "ntrials": 8,
+        "niters": 10,
+        "optimization_ratio": 2.0,
+        "fixed_slices": null,
+        "score": {
+          "tc_weight": 1.0,
+          "sc_weight": 1.0,
+          "rw_weight": 0.0,
+          "sc_target": "log2(effective_target_elements)"
+        }
+      },
+      "public_top_level_seed": null,
+      "repeat_semantics": "deterministic repeated execution for runtime variability only; quality is counted once per circuit because OMECO 0.2.6 uses fixed internal trial seeds"
+    }
+  ],
+  "timing_boundary": {
+    "planner_api_wall_seconds": "The native path-search and slicing API stages, recorded separately when the method has multiple stages.",
+    "arctn_shared_path_accounting": "The Heavy path is physically searched once per circuit and repeat. For a logical end-to-end comparison, add the same saved Heavy path-search wall to each ArcTN slicing-stage wall; report the shared setup and slicing stage separately as well.",
+    "exact_replay_wall_seconds_before_write": "Common exact validation and path conversion after the native API returns, measured before JSON serialization and persistence.",
+    "external_wall_seconds": "Worker process launch through complete process exit; this is the one-hour hard-limit boundary.",
+    "classification": "Shared-server, concurrent throughput observations; not isolated single-cell latency."
+  },
+  "artifacts": {
+    "save_shared_heavy_ssa_path": true,
+    "save_final_ssa_path": true,
+    "save_final_linear_path": true,
+    "save_final_sliced_indices": true,
+    "save_exact_total_sliced_metrics": true,
+    "save_intermediate_trial_paths": false,
+    "sample_recursive_process_tree_rss": true,
+    "retain_all_terminal_failures": true
+  },
+  "phase_boundary": {
+    "this_package": "path search and slicing quality only",
+    "fixed_plan_execution": "separate optional campaign after successful plans are sealed",
+    "e2e_rule": "If execution is run later, report planning and execution separately before any summed end-to-end value."
+  },
+  "analysis_population": {
+    "all_terminal_population": "All 800 cells, with every failure retained.",
+    "strict_cross_library_population": "The 20 scalar-output circuits, where all methods have no output indices available to slice.",
+    "internal_slicing_full_corpus_population": "All 32 circuits for ArcTN and Cotengra, restricted to internal-index slicing.",
+    "omeco_non_scalar_output_boundary": "OMECO TreeSASlicer has no public allow_outer=False or excluded-index control. Its 12 non-scalar-output cases are supplementary and must report any sliced output indices explicitly.",
+    "repeat_aggregation": "Aggregate five repeats within each seeded or repeated method and circuit first. OMECO quality is counted once per circuit because its five executions are deterministic repeats; use those five only for runtime variability. Then compute paired geometric means across circuits, and also report all-terminal coverage and common-success results."
+  }
+}

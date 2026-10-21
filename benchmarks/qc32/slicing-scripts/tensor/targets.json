@@ -1,0 +1,20 @@
+{
+  "schema": "qc32-open-output-slicing-targets",
+  "base_target_elements": 67108864,
+  "base_target_width_log2": 26,
+  "complex128_bytes_per_element": 16,
+  "base_target_single_tensor_bytes_complex64": 536870912,
+  "base_target_single_tensor_bytes_complex128": 1073741824,
+  "rule": "effective_target_elements = min(base_target_elements, output_elements // minimum_output_blocks)",
+  "instances": [
+    {
+      "ordinal": 28,
+      "instance": "qc_rand_supremacy2d_7_2_800",
+      "output_elements": 2097152,
+      "effective_target_elements": 524288,
+      "output_bound": false,
+      "output_slicing_required": true
+    }
+  ],
+  "minimum_output_blocks": 4
+}

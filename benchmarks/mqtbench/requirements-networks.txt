@@ -1,0 +1,7 @@
+# Environment that built the MQT Bench networks (Python 3.12.3).
+quimb==1.15.0
+numpy==2.5.3
+scipy==1.18.1
+autoray==0.11.0
+cotengra==0.8.2
+numba==0.67.0

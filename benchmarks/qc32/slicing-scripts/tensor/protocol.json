@@ -1,0 +1,138 @@
+{
+  "schema": "qc32-open-output-slicing-protocol",
+  "campaign_name": "qc32-open-output-slicing-dp-fix-supplement-v1",
+  "claim_boundary": "Planning-only repair supplement for the five failed ArcTN Heavy paths in qc32-open-output-slicing-supplement-v1. It repeats only the affected network and both paired ArcTN slicing configurations. Original failed records are retained in the original campaign.",
+  "corpus": {
+    "schema": "einsum-quantum32-language-neutral-corpus-v1",
+    "directory": "corpus",
+    "instance_count": 1,
+    "selection": "Only qc_rand_supremacy2d_7_2_800, retaining original official32 ordinal 28."
+  },
+  "objective": {
+    "primary_quality_metric": "total_sliced_flops",
+    "lower_is_better": true,
+    "common_exact_replay": "n_slices * exact_per_slice_contraction_flops",
+    "gather_additions_included": false,
+    "read_write_and_combo64": "reporting_only",
+    "native_selection_boundary": "ArcTN Heavy path search and dynamic completed-round ranking use pure FLOPs. ArcTN fixed-tree leg choice is the library's deterministic target-feasibility heuristic and has no objective argument. Cotengra receives minimize='flops'. OMECO TreeSA is pure FLOPs, while TreeSASlicer uses its native FLOPs-directed target-space penalty. Common exact total sliced FLOPs is the reported comparison metric, not a claim that every native slicer ranks candidates by the identical formula."
+  },
+  "target": {
+    "table": "targets.json",
+    "base_target_elements": 67108864,
+    "base_target_width_log2": 26,
+    "effective_target_rule": "min(base_target_elements, output_elements // minimum_output_blocks)",
+    "meaning": "largest single intermediate tensor in one slice, measured in elements",
+    "not_equivalent_to": "process RSS or a complete execution memory limit",
+    "complex64_single_tensor_reference_bytes": 536870912,
+    "complex128_single_tensor_reference_bytes": 1073741824,
+    "minimum_output_blocks": 4,
+    "output_indices_allowed": true,
+    "full_output_assembly": "Output blocks are written to disjoint output coordinates; internal slice contributions are summed within each block. No numerical block assembly is timed."
+  },
+  "repeat_ordinals": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "expected_cell_count": 10,
+  "resources": {
+    "physical_cores_per_cell": 8,
+    "maximum_concurrent_cells": 8,
+    "maximum_allocated_physical_cores": 64,
+    "cooperative_planner_seconds_for_supported_methods": 3500,
+    "methods_without_public_cooperative_timeout": [
+      "arctn-heavy-fixed-tree-post-slicing",
+      "arctn-heavy-dynamic-slicing"
+    ],
+    "hard_wall_seconds_per_cell": 3600,
+    "resource_sample_interval_seconds": 0.5,
+    "numeric_library_threads": 1
+  },
+  "queue": {
+    "policy": "method-major global work-conserving queue",
+    "barrier_between_methods": false,
+    "description": "The fixed-tree ArcTN row is queued first and atomically saves one Heavy path for every circuit and repeat. The following ArcTN dynamic row must load that exact path. Whenever one eight-core slot is released, the next pending cell starts immediately."
+  },
+  "shared_heavy_path": {
+    "producer_method": "arctn-heavy-fixed-tree-post-slicing",
+    "consumer_method": "arctn-heavy-dynamic-slicing",
+    "directory": "run/shared-heavy-paths",
+    "preset": "heavy",
+    "seed": "repeat_ordinal",
+    "rate_enabled": true,
+    "trial_cap": 192,
+    "expected_rate": 100000000,
+    "flops_weight": 1,
+    "read_write_weight": 0,
+    "max_time_seconds": 3500,
+    "path_equality_rule": "The consumer must load the producer artifact and the harness must report the same input SSA path. Dynamic slicing may change only its delivered output path."
+  },
+  "methods": [
+    {
+      "id": "arctn-heavy-fixed-tree-post-slicing",
+      "library": "ArcTN",
+      "entrypoint": "arctn.arctn_schedule(preset='heavy', target_size=None) followed by arctn::slice::find_slices_to_size_with_options(..., allow_outer=true)",
+      "mechanism": "Search Heavy once per circuit and repeat, then choose internal and output slice indices on that unchanged SSA path.",
+      "shared_heavy_path_role": "producer",
+      "slicing_mode": "fixed",
+      "changes_tree_during_slicing": false,
+      "allow_outer": true
+    },
+    {
+      "id": "arctn-heavy-dynamic-slicing",
+      "library": "ArcTN",
+      "entrypoint": "arctn::slice::slice_and_reconf_to_size_with_options(..., allow_outer=true)",
+      "mechanism": "Use the same Heavy path as Fixed, alternating index slicing and subtree reconfiguration, retaining the feasible round with minimum total sliced FLOPs.",
+      "shared_heavy_path_role": "consumer",
+      "slicing_mode": "dynamic",
+      "changes_tree_during_slicing": true,
+      "rounds": 3,
+      "subtree_size": 8,
+      "flops_weight": 1,
+      "read_write_weight": 0,
+      "allow_outer": true
+    }
+  ],
+  "timing_boundary": {
+    "planner_api_wall_seconds": "The native path-search and slicing API stages, recorded separately when the method has multiple stages.",
+    "arctn_shared_path_accounting": "The Heavy path is physically searched once per circuit and repeat. For a logical end-to-end comparison, add the same saved Heavy path-search wall to each ArcTN slicing-stage wall; report the shared setup and slicing stage separately as well.",
+    "exact_replay_wall_seconds_before_write": "Common exact validation and path conversion after the native API returns, measured before JSON serialization and persistence.",
+    "external_wall_seconds": "Worker process launch through complete process exit; this is the one-hour hard-limit boundary.",
+    "classification": "Shared-server, concurrent throughput observations; not isolated single-cell latency."
+  },
+  "artifacts": {
+    "save_shared_heavy_ssa_path": true,
+    "save_final_ssa_path": true,
+    "save_final_linear_path": true,
+    "save_final_sliced_indices": true,
+    "save_exact_total_sliced_metrics": true,
+    "save_intermediate_trial_paths": false,
+    "sample_recursive_process_tree_rss": true,
+    "retain_all_terminal_failures": true,
+    "save_output_block_count": true,
+    "save_internal_slices_per_output_block": true
+  },
+  "phase_boundary": {
+    "this_package": "path search and slicing quality only",
+    "fixed_plan_execution": "separate optional campaign after successful plans are sealed",
+    "e2e_rule": "If execution is run later, report planning and execution separately before any summed end-to-end value."
+  },
+  "analysis_population": {
+    "all_terminal_population": "All 10 repair cells, retaining any failure and wall-limit status.",
+    "common_success_population": "Five paired repetitions of Fixed and Dynamic on the same newly searched Heavy paths.",
+    "actual_slicing_requirement": "Every success must have n_slices > 1 and at least one sliced output index. All shapes have target strictly below full output elements.",
+    "repeat_aggregation": "Retain r000-r004 and report the paired per-repeat results. Do not pool this repair with the original failures as additional independent successful runs.",
+    "comparison_scope": "Same network, seeds, Heavy settings, target and slicer settings as the original v1; source change is limited to rejecting overflowed noncompetitive DP split candidates.",
+    "original_evidence": "Original v1 remains unchanged; identify these as supplemental replacement results during combined reporting."
+  },
+  "supplement": {
+    "original_campaign": "qc32-open-output-slicing-supplement-v1",
+    "reason": "Heavy leaf-order DP rejected the whole search when a noncompetitive split overflowed linear f64.",
+    "source_change": "Treat overflowed split candidates as infinite and skip them; report an error only when the root has no finite solution.",
+    "preserve_original_evidence": true,
+    "keep_original_cell_identity": true,
+    "start_condition": "Wait until the original campaign has exited and released its physical-core reservations; select idle cores again."
+  }
+}

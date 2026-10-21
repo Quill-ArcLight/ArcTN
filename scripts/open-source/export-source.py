@@ -17,7 +17,7 @@ from advisory_policy import evaluate
 
 ROOT_FILES = {".gitignore", ".gitattributes", "Cargo.toml", "Cargo.lock", "build.rs", "README.md", "README.en.md", "README.zh-CN.md",
               "LICENSE", "LICENSE-ARCTN-ENGINE.txt", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "deny.toml"}
-PREFIXES = ("src/", "tests/", "examples/", "THIRD_PARTY_LICENSES/", "scripts/open-source/", ".github/workflows/",
+PREFIXES = ("src/", "tests/", "examples/", "benchmarks/", "THIRD_PARTY_LICENSES/", "scripts/open-source/", ".github/workflows/",
             "pybind/src/", "pybind/python/", "pybind/tests/", "pybind/licenses/")
 EXTRA_FILES = {"docs/mpi.md", "docs/engine-interface.md", "pybind/Cargo.toml", "pybind/Cargo.lock",
                "pybind/build.rs", "pybind/README.md", "pybind/pyproject.toml"}

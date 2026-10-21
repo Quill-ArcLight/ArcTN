@@ -148,6 +148,10 @@ let fin = compiled.finalize();
 let result = fin.execute(slots[fin.slot()].as_ref().unwrap())?;
 ```
 
+## 基准测试
+
+[benchmarks/](benchmarks/README.md) 收录了 ArcTN 论文实验（QC32 和 MQT Bench）的脚本、输入和记录结果，并说明如何核对记录的代价、如何重新运行各个规划器。
+
 <a id="license"></a>
 
 ## 许可证

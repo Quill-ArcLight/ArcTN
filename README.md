@@ -148,6 +148,10 @@ let fin = compiled.finalize();
 let result = fin.execute(slots[fin.slot()].as_ref().unwrap())?;
 ```
 
+## Benchmarks
+
+[benchmarks/](benchmarks/README.md) contains the scripts, inputs and recorded results of the experiments in the ArcTN paper (QC32 and MQT Bench), with instructions for checking the recorded costs and for running the planners again.
+
 <a id="license"></a>
 
 ## License
