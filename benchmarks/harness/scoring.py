@@ -80,7 +80,7 @@ def evaluate_ssa_path(
     flops = 0
     writes = 0
     largest = _product(output, size_dict) if n == 1 else 1
-    step = 0  # largest two inputs plus result of one contraction
+    max_step_size = 0  # largest two inputs plus result of one contraction
     for step, pair in enumerate(ssa_path):
         require(len(pair) == 2, f"SSA step {step} is not binary")
         left_id, right_id = int(pair[0]), int(pair[1])
@@ -101,7 +101,7 @@ def evaluate_ssa_path(
         size = _product(result, size_dict)
         writes += size
         largest = max(largest, size)
-        step = max(step, raw_sizes[left_id] + raw_sizes[right_id] + size)
+        max_step_size = max(max_step_size, raw_sizes[left_id] + raw_sizes[right_id] + size)
         peak = max(peak, alive + size)
         alive += size - raw_sizes[left_id] - raw_sizes[right_id]
         slots.append(result)
@@ -115,7 +115,7 @@ def evaluate_ssa_path(
         "total_write": writes,
         "max_size": largest,
         "peak_size": peak,
-        "max_step_size": step,
+        "max_step_size": max_step_size,
         "log10_flops": None if flops == 0 else math.log10(flops),
         "log2_max_size": math.log2(largest),
     }
